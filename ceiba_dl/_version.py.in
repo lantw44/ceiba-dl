@@ -1,0 +1,5 @@
+version = '@VERSION@'
+prefix = '@prefix@'
+bindir = '@bindir@'
+pkgdatadir = '@pkgdatadir@'
+helperdir = '@helperdir@'

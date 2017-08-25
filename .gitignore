@@ -1,0 +1,74 @@
+# Autotools
+aclocal.m4
+autom4te.cache
+autoscan.log
+compile
+config.cache
+config.guess
+config.h
+config.h.in
+config.log
+config.status
+config.sub
+configure
+configure.scan
+depcomp
+gtk-doc.make
+install-sh
+libtool
+ltmain.sh
+missing
+Makefile
+Makefile.in
+py-compile
+stamp-h1
+ylwrap
+.dirstamp
+.deps
+.libs
+.version
+
+# Vim
+*.swp
+*.swo
+
+# Emacs
+\#*#
+.#*
+
+# Core dumps
+core
+core.*
+*.core
+
+# Backup files
+*~
+*.~
+
+# Generated files
+*.o
+*.a
+*.so
+*.lo
+*.la
+*.log
+*.aux
+*.out
+*.synctex.gz
+*.zip
+*.tar
+*.tar.*
+
+# pkg-config files
+*.pc
+
+# Python
+*.pyc
+
+# Common build directories
+build*
+
+# Project-specific files
+/ceiba-dl
+/ceiba_dl/_version.py
+/helpers/*-helper-webkitgtk
