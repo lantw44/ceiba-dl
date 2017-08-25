@@ -1,7 +1,7 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-AC_INIT([ceiba-dl], [0.1], [https://github.com/lantw44/ceiba-dl/issues])
+AC_INIT([ceiba-dl], [0.1.1], [https://github.com/lantw44/ceiba-dl/issues])
 AC_CONFIG_SRCDIR([ceiba_dl/__init__.py])
 AC_CONFIG_HEADERS([config.h])
 
@@ -15,6 +15,8 @@ AC_ARG_ENABLE([helper-webkitgtk],
     [enable_helper_webkitgtk="yes"])
 AM_CONDITIONAL([ENABLE_HELPER_WEBKITGTK], [test "$enable_helper_webkitgtk" = "yes"])
 
+AC_PROG_CC
+AC_PROG_CC_STDC
 AM_PATH_PYTHON([3])
 case "$PYTHON" in
     /*)
@@ -31,8 +33,6 @@ ceiba_dl_pythondir='${pythondir}/ceiba_dl'
 AC_SUBST([ceiba_dl_pythondir], [${ceiba_dl_pythondir}])
 
 if test "$enable_helper_webkitgtk" = "yes"; then
-    AC_PROG_CC
-    AC_PROG_CC_STDC
     AX_IS_RELEASE([git-directory])
     AX_COMPILER_FLAGS()
     case "$WARN_CFLAGS" in
