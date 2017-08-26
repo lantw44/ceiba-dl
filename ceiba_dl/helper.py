@@ -111,11 +111,12 @@ class Login:
             import ceiba_dl._version
             personal_helper_path = os.path.join(xdg.BaseDirectory.xdg_data_home,
                 self.config.name, helpers_dir)
-            if personal_helper_path in helper_path:
-                assert helper_path[0] == personal_helper_path
-                helper_path.insert(1, ceiba_dl._version.helperdir)
-            else:
-                helper_path.insert(0, ceiba_dl._version.helperdir)
+            if os.path.isdir(ceiba_dl._version.helperdir):
+                if personal_helper_path in helper_path:
+                    assert helper_path[0] == personal_helper_path
+                    helper_path.insert(1, ceiba_dl._version.helperdir)
+                else:
+                    helper_path.insert(0, ceiba_dl._version.helperdir)
         except ImportError:
             pass
 
