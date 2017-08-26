@@ -128,6 +128,14 @@ def row_get_value(row, expected_keys, value_mappings,
     else:
         assert False
 
+# 在真正開始爬網頁前先檢查功能是否開啟
+
+def ceiba_function_enabled(request, course_sn, function, path):
+    frame_path = '/modules/index.php'
+    frame_args = {'csn': course_sn, 'default_fun': function}
+    request.web(frame_path, args=frame_args)
+    return len(request.web(path).xpath('//table')) > 0
+
 # 基本的檔案型別：普通檔案、目錄、內部連結、外部連結
 
 class File:
@@ -511,12 +519,16 @@ class WebCourseDirectory(Directory):
         self.add(s['file_course_metadata'], metadata)
 
         # homeworks
-        self.add(s['dir_course_homeworks'], CourseHomeworksDirectory(
-            self.vfs, self, self._sn, [], api=False))
+        if ceiba_function_enabled(self.vfs.request, self._sn,
+            'hw', '/modules/hw/hw.php'):
+            self.add(s['dir_course_homeworks'], CourseHomeworksDirectory(
+                self.vfs, self, self._sn, [], api=False))
 
         # course_grade
-        self.add(s['dir_course_grades'], CourseGradesDirectory(
-            self.vfs, self, self._sn, []))
+        if ceiba_function_enabled(self.vfs.request, self._sn,
+            'grade', '/modules/grade/grade.php'):
+            self.add(s['dir_course_grades'], CourseGradesDirectory(
+                self.vfs, self, self._sn, []))
 
         self.ready = True
 
@@ -773,13 +785,7 @@ class CourseHomeworksDirectory(Directory):
             self.vfs.request.web(frame_path, args=frame_args)
             hw_list_page = self.vfs.request.web(hw_list_path)
 
-            if len(hw_list_page.xpath('//table')) == 0:
-                self.add(s['file_course_homeworks_unavailable'], BytesFile(
-                    self.vfs, self, etree.tostring(
-                        self.vfs.request.web(hw_list_path, encoding='big5'),
-                            encoding='utf-8', pretty_print=True)))
-                self.ready = True
-                return
+            assert len(hw_list_page.xpath('//table')) > 0
 
             hw_list_rows_all = hw_list_page.xpath('//div[@id="sect_cont"]/table/tr')
             hw_list_rows = hw_list_rows_all[1:]
@@ -1344,15 +1350,7 @@ class CourseGradesDirectory(Directory):
             if not grade_page_has_hidden_rows:
                 break
 
-        # 找不到表格表示這功能沒有開啟，這只有在 CEIBA API 無法使用時才可能發生
-        if len(grade_page.xpath('//table')) == 0:
-            assert len(self._grades) == 0
-            self.add(s['file_course_grades_unavailable'], BytesFile(
-                self.vfs, self, etree.tostring(
-                    self.vfs.request.web(grade_path, args=grade_args,
-                        encoding='big5'), encoding='utf-8', pretty_print=True)))
-            self.ready = True
-            return
+        assert len(grade_page.xpath('//table')) > 0
 
         grade_rows_all = grade_page.xpath('//div[@id="sect_cont"]/table[1]/tr')
         grade_rows = grade_rows_all[1:]
