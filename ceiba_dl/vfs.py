@@ -1692,6 +1692,7 @@ class JSONFile(Regular):
     def add(self, key, value, source):
         assert key not in self._json
         assert key not in self._sources
+        assert isinstance(source, str) or isinstance(source, list)
         self._json[key] = value
         self._sources[key] = source
 
