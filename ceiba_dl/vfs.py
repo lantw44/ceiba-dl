@@ -457,6 +457,18 @@ class CourseDirectory(Directory):
             self.add(s['dir_course_grades'], CourseGradesDirectory(
                 self.vfs, self, self._sn, result['course_grade']))
 
+        # 資源分享
+        if ceiba_function_enabled(self.vfs.request, self._sn,
+            'share', '/modules/share/share.php'):
+            self.add(s['dir_course_share'], CourseShareDirectory(
+                self.vfs, self, self._sn))
+
+        # 投票區
+        if ceiba_function_enabled(self.vfs.request, self._sn,
+            'vote', '/modules/vote/vote.php'):
+            self.add(s['dir_course_vote'], CourseVoteDirectory(
+                self.vfs, self, self._sn))
+
         self.ready = True
 
 class WebCourseDirectory(Directory):
@@ -530,6 +542,18 @@ class WebCourseDirectory(Directory):
             'grade', '/modules/grade/grade.php'):
             self.add(s['dir_course_grades'], CourseGradesDirectory(
                 self.vfs, self, self._sn, []))
+
+        # 資源分享
+        if ceiba_function_enabled(self.vfs.request, self._sn,
+            'share', '/modules/share/share.php'):
+            self.add(s['dir_course_share'], CourseShareDirectory(
+                self.vfs, self, self._sn))
+
+        # 投票區
+        if ceiba_function_enabled(self.vfs.request, self._sn,
+            'vote', '/modules/vote/vote.php'):
+            self.add(s['dir_course_vote'], CourseVoteDirectory(
+                self.vfs, self, self._sn))
 
         self.ready = True
 
@@ -1681,6 +1705,632 @@ class CourseGradesDirectory(Directory):
             grade_list_file.add(grade_list_file_row)
 
         grade_list_file.finish()
+        self.ready = True
+
+class CourseShareDirectory(Directory):
+    def __init__(self, vfs, parent, course_sn):
+        super().__init__(vfs, parent)
+        self._course_sn = course_sn
+
+    def fetch(self):
+        from enum import Enum
+        s = self.vfs.strings
+
+        frame_path = '/modules/index.php'
+        frame_args = {'csn': self._course_sn, 'default_fun': 'share'}
+
+        self.vfs.request.web(frame_path, args=frame_args)
+
+        class AttrType(Enum):
+            EMAIL = 1
+            TYPE = 2
+            TITLE = 3
+            LINK = 4
+            STRING = 5
+            YEAR_MONTH = 6
+            YEAR_MONTH_DATE = 7
+            ENUM = 8
+            RATING = 9
+
+        share_list_attrs = [
+            ['名稱', 'Name'],
+            ['簡介', 'Description'],
+            ['分享者', 'Author'],
+            ['評分', 'Rating'],
+            ['點閱數', 'Views'],
+        ]
+
+        share_type_attrs = [
+            ('/modules/share/share.php', {'op': 'url'},
+             '/modules/share/share_url_show.php',
+             s['dir_course_share_url'], [
+                (['姓名', 'Name'], AttrType.EMAIL),
+                (['分享類別', 'Type'], AttrType.TYPE,
+                    ['網頁介紹', 'Website Introduction']),
+                (['網站名稱', 'Website'], AttrType.TITLE),
+                (['網址', 'URL'], AttrType.LINK,
+                    s['attr_course_share_url_url']),
+                (['網站介紹', 'Description'], AttrType.STRING,
+                    s['attr_course_share_url_description']),
+                (['評分', 'Rating'], AttrType.RATING,
+                    s['attr_course_share_rating_detail']),
+             ]),
+            ('/modules/share/share.php', {'op': 'book'},
+             '/modules/share/share_book_show.php',
+             s['dir_course_share_book'], [
+                (['姓名', 'Name'], AttrType.EMAIL),
+                (['分享類別', 'Type'], AttrType.TYPE,
+                    ['書籍介紹', 'Books Introduction']),
+                (['語言', 'Language'], AttrType.STRING,
+                    s['attr_course_share_book_language']),
+                (['書名', 'Title'], AttrType.TITLE),
+                (['版本', 'Edition'], AttrType.STRING,
+                    s['attr_course_share_book_edition']),
+                (['作者', 'Author'], AttrType.STRING,
+                    s['attr_course_share_book_author']),
+                (['出版社', 'Publisher'], AttrType.STRING,
+                    s['attr_course_share_book_publisher']),
+                (['出版年月', 'Published Date'], AttrType.YEAR_MONTH,
+                    (s['attr_course_share_book_published_date_year'],
+                     s['attr_course_share_book_published_date_month']),
+                    (['年', 'year'], ['月', 'month'])),
+                (['書籍介紹', 'Books Introduction'], AttrType.STRING,
+                    s['attr_course_share_book_books_introduction']),
+                (['書籍介紹', 'Books Introduction'], AttrType.RATING,
+                    s['attr_course_share_rating_detail']),
+             ]),
+            ('/modules/share/share.php', {'op': 'perd'},
+             '/modules/share/share_periodical_show.php',
+             s['dir_course_share_perd'], [
+                (['姓名', 'Name'], AttrType.EMAIL),
+                (['分享類別', 'Type'], AttrType.TYPE,
+                    ['書籍介紹', 'Books Introduction']),
+                (['文章名稱', 'Article Title'], AttrType.TITLE),
+                (['期刊名稱', 'Periodical Title'], AttrType.STRING,
+                    s['attr_course_share_perd_periodical_title']),
+                (['作者', 'Author'], AttrType.STRING,
+                    s['attr_course_share_perd_author']),
+                (['出版社', 'Publisher'], AttrType.STRING,
+                    s['attr_course_share_perd_publisher']),
+                (['出版年月', 'Published Date'], AttrType.YEAR_MONTH_DATE,
+                    (s['attr_course_share_perd_published_date_year'],
+                     s['attr_course_share_perd_published_date_month'],
+                     s['attr_course_share_perd_published_date_date']),
+                    (['年'], ['月'], ['日'])),
+                (['發刊週期', 'Frequency'], AttrType.ENUM,
+                    s['attr_course_share_perd_frequency'], [
+                    ('1', ['週刊', 'weekly'],
+                        s['value_course_share_perd_frequency_1']),
+                    ('2', ['雙週刊', 'biweekly'],
+                        s['value_course_share_perd_frequency_2']),
+                    ('3', ['月刊', 'monthly'],
+                        s['value_course_share_perd_frequency_3']),
+                    ('4', ['季刊', 'quarterly'],
+                        s['value_course_share_perd_frequency_4']),
+                    ('5', ['年刊', 'annual'],
+                        s['value_course_share_perd_frequency_5']),
+                    ('6', ['其他', 'other'],
+                        s['value_course_share_perd_frequency_6'])]),
+                (['文章介紹', 'Articles Introduction'], AttrType.STRING,
+                    s['attr_course_share_perd_articles_introduction']),
+                (['文章介紹', 'Articles Introduction'], AttrType.RATING,
+                    s['attr_course_share_rating_detail']),
+            ]),
+        ]
+
+        for share_type_attr in share_type_attrs:
+            # 首先我們要取得這類型資源分享的清單，但因為「簡介」欄位的內容可能
+            # 會在不正確的地方被截斷，導致編碼錯誤，使得網頁沒有被完整讀入。因
+            # 這裡我們改用手動解碼來避免資料遺失。
+            assert len(share_type_attr) == 5
+            share_list_path = share_type_attr[0]
+            share_list_args = share_type_attr[1]
+            share_list_html = BytesIO()
+            self.vfs.request.file(
+                share_list_path, share_list_html, args=share_list_args)
+
+            share_list_page = etree.fromstring(
+                share_list_html.getvalue().decode('big5', errors='replace'),
+                etree.HTMLParser(remove_comments=True))
+            share_list_tables = share_list_page.xpath(
+                '//div[@id="sect_cont"]//table[1]')
+
+            if len(share_list_tables) == 2:
+                # 這表示有遇到編碼錯誤，第二項的資料才是完整的
+                share_list_table = share_list_tables[1]
+            elif len(share_list_tables) == 1:
+                # 只有一項是正常現象
+                share_list_table = share_list_tables[0]
+            else:
+                assert False
+
+            share_list_rows_all = share_list_table.xpath('./tr')
+            share_list_rows = share_list_rows_all[1:]
+            share_list_header_row = share_list_rows_all[0]
+
+            assert len(share_list_header_row) == len(share_list_attrs)
+            for index, share_list_attr in enumerate(share_list_attrs):
+                assert share_list_header_row[index].tag == 'th'
+                assert share_list_header_row[index].text in share_list_attr
+
+            # 沒有資料就算了，直接換下一種類型
+            if len(share_list_rows) == 0:
+                continue
+
+            share_show_path = share_type_attr[2]
+            share_list_dirname = share_type_attr[3]
+            share_show_fields = share_type_attr[4]
+
+            share_list_dir = Directory(self.vfs, self)
+
+            for share_list_row in share_list_rows:
+                # 名稱
+                if len(share_list_row[0]) == 1:
+                    assert not share_list_row[0].text
+                    assert share_list_row[0][0].tag == 'a'
+                    share_name = element_get_text(share_list_row[0][0])
+                elif len(share_list_row[0]) == 0:
+                    share_name = element_get_text(share_list_row[0])
+                else:
+                    assert False
+
+                # 簡介
+                assert len(share_list_row[1]) == 1
+                assert share_list_row[1][0].tag == 'a'
+                assert share_list_row[1][0].get('href')
+                assert len(share_list_row[1][0]) == 1
+                assert share_list_row[1][0][0].tag == 'span'
+                assert share_list_row[1][0][0].get('class') == 'more'
+                assert share_list_row[1][0][0].text == 'more »'
+                path, args = url_to_path_and_args(share_list_row[1][0].get('href'))
+
+                assert share_show_path.rsplit('/', maxsplit=1)[1] == path
+                share_sn = args['sn']
+                share_show_args = {'sn': share_sn}
+
+                share_file = JSONFile(self.vfs, share_list_dir)
+                share_filename = format_filename(share_sn, share_name, 'json')
+
+                share_file.add(s['attr_course_share_sn'],
+                    share_sn, share_list_path)
+                share_file.add(s['attr_course_share_name'],
+                    share_name, share_list_path)
+
+                # 分享者
+                assert len(share_list_row[2]) == 1
+                assert share_list_row[2][0].text
+                assert share_list_row[2][0].tag == 'a'
+                assert share_list_row[2][0].get('href').startswith('mailto:')
+
+                share_shared_by = share_list_row[2][0].text
+                share_shared_by_email = share_list_row[2][0].get('href')[7:]
+
+                share_file.add(s['attr_course_share_author'],
+                    share_shared_by, share_list_path)
+                share_file.add(s['attr_course_share_author_email'],
+                    share_shared_by_email, share_list_path)
+
+                # 評分
+                assert len(share_list_row[3]) == 0
+                share_rating = element_get_text(share_list_row[3])
+                share_file.add(s['attr_course_share_rating'],
+                    share_rating, share_list_path)
+
+                # 點閱數
+                assert len(share_list_row[4]) == 0
+                share_views = element_get_text(share_list_row[4])
+                share_file.add(s['attr_course_share_views'],
+                    share_views, share_list_path)
+
+                # 下載分享詳細資料
+                share_show_page = self.vfs.request.web(
+                    share_show_path, args=share_show_args)
+                share_show_rows = share_show_page.xpath(
+                    '//div[@id="sect_cont"]/table/tr')
+                assert len(share_show_rows) == len(share_show_fields)
+
+                for index, share_show_row in enumerate(share_show_rows):
+                    share_show_field = share_show_fields[index]
+                    field_name = share_show_field[0]
+                    field_type = share_show_field[1]
+
+                    if field_type == AttrType.EMAIL:
+                        assert len(share_show_field) == 2
+                        element = row_get_value(share_show_row,
+                            field_name, {}, free_form=True, return_object=True)
+                        assert len(element) == 1
+                        assert element[0].text
+                        assert element[0].tag == 'a'
+                        assert element[0].get('href').startswith('mailto:')
+                        assert element[0].text == share_shared_by
+                        assert element[0].get('href')[7:] == share_shared_by_email
+
+                    elif field_type == AttrType.TYPE:
+                        assert len(share_show_field) == 3
+                        field_acceptable_values = share_show_field[2]
+                        row_get_value(share_show_row, field_name,
+                            { tuple(field_acceptable_values): None })
+
+                    elif field_type == AttrType.TITLE:
+                        assert len(share_show_field) == 2
+                        title = row_get_value(share_show_row,
+                            field_name, {}, free_form=True)
+                        assert title == share_name
+
+                    elif field_type == AttrType.LINK:
+                        assert len(share_show_field) == 3
+                        field_output = share_show_field[2]
+                        element = row_get_value(share_show_row, field_name,
+                            {}, free_form=True, return_object=True)
+                        assert len(element) == 1
+                        assert element[0].tag == 'a'
+                        assert element[0].text == element[0].get('href')
+                        share_file.add(field_output,
+                            element[0].get('href'), share_show_path)
+
+                    elif field_type == AttrType.STRING:
+                        assert len(share_show_field) == 3
+                        field_output = share_show_field[2]
+                        element = row_get_value(share_show_row, field_name,
+                            {}, free_form=True, return_object=True)
+                        assert list(map(lambda x: x.tag, element)) == \
+                            ['br'] * len(element)
+                        string = ''.join(element.itertext())
+                        if string.find('\r') >= 0 and string.find('\n') < 0:
+                            string = string.replace('\r', '\n')
+                        share_file.add(field_output, string, share_show_path)
+
+                    elif field_type == AttrType.YEAR_MONTH:
+                        assert len(share_show_field) == 4
+                        assert len(share_show_field[2]) == 2
+                        assert len(share_show_field[3]) == 2
+                        field_output_year = share_show_field[2][0]
+                        field_output_month = share_show_field[2][1]
+                        field_separator_year = share_show_field[3][0]
+                        field_separator_month = share_show_field[3][1]
+
+                        year_month = row_get_value(share_show_row,
+                            field_name, {}, free_form=True)
+
+                        for possible_separator in field_separator_year:
+                            parts = year_month.split(possible_separator)
+                            if len(parts) == 2:
+                                year, remaining = parts
+                                year = year.strip()
+                                break
+                            assert len(parts) == 1
+                        else:
+                            assert False
+
+                        for possible_separator in field_separator_month:
+                            parts = remaining.split(possible_separator)
+                            if len(parts) == 2:
+                                month = parts[0].strip()
+                                break
+                            assert len(parts) == 1
+                        else:
+                            assert False
+
+                        share_file.add(field_output_year, year, share_show_path)
+                        share_file.add(field_output_month, month, share_show_path)
+
+                    elif field_type == AttrType.YEAR_MONTH_DATE:
+                        assert len(share_show_field) == 4
+                        assert len(share_show_field[2]) == 3
+                        assert len(share_show_field[3]) == 3
+                        field_output_year = share_show_field[2][0]
+                        field_output_month = share_show_field[2][1]
+                        field_output_date = share_show_field[2][2]
+                        field_separator_year = share_show_field[3][0]
+                        field_separator_month = share_show_field[3][1]
+                        field_separator_date = share_show_field[3][2]
+
+                        year_month_date = row_get_value(share_show_row,
+                            field_name, {}, free_form=True)
+
+                        for possible_separator in field_separator_year:
+                            parts = year_month_date.split(possible_separator)
+                            if len(parts) == 2:
+                                year, remaining1 = parts
+                                year = year.strip()
+                                break
+                            assert len(parts) == 1
+                        else:
+                            assert False
+
+                        for possible_separator in field_separator_month:
+                            parts = remaining1.split(possible_separator)
+                            if len(parts) == 2:
+                                month, remaining2 = parts
+                                month = month.strip()
+                                break
+                            assert len(parts) == 1
+                        else:
+                            assert False
+
+                        for possible_separator in field_separator_date:
+                            parts = remaining2.split(possible_separator)
+                            if len(parts) == 2:
+                                date = parts[0].strip()
+                                break
+                            assert len(parts) == 1
+                        else:
+                            assert False
+
+                        share_file.add(field_output_year, year, share_show_path)
+                        share_file.add(field_output_month, month, share_show_path)
+                        share_file.add(field_output_date, date, share_show_path)
+
+                    elif field_type == AttrType.ENUM:
+                        assert len(share_show_field) == 4
+                        field_output = share_show_field[2]
+                        field_values = share_show_field[3]
+
+                        value_mappings = dict()
+                        for field_value in field_values:
+                            value_mappings[tuple(field_value[1])] = field_value[2]
+
+                        enum_value = row_get_value(share_show_row, field_name,
+                            value_mappings)
+
+                        share_file.add(field_output, enum_value, share_show_path)
+
+                    elif field_type == AttrType.RATING:
+                        assert len(share_show_field) == 3
+                        field_output = share_show_field[2]
+                        element = row_get_value(share_show_row, field_name,
+                            {}, free_form=True, return_object=True)
+                        assert len(element) == 2
+                        assert element[1].tag == 'div'
+                        assert element[0].tag == 'p'
+                        assert element[0].get('class') == 'rate'
+                        rating = list(element[0].itertext())[0].strip()
+                        assert rating.startswith('平均得分：') or \
+                            rating.startswith('Average：')
+                        share_file.add(field_output, rating, share_show_path)
+
+                    else:
+                        assert False
+
+                share_file.finish()
+                share_list_dir.add(share_filename, share_file)
+
+            self.add(share_list_dirname, share_list_dir)
+            share_list_dir.ready = True
+
+        self.ready = True
+
+class CourseVoteDirectory(Directory):
+    def __init__(self, vfs, parent, course_sn):
+        super().__init__(vfs, parent)
+        self._course_sn = course_sn
+
+    def fetch(self):
+        import ast
+        s = self.vfs.strings
+
+        frame_path = '/modules/index.php'
+        frame_args = {'csn': self._course_sn, 'default_fun': 'vote'}
+
+        vote_list_path = '/modules/vote/vote.php'
+
+        self.vfs.request.web(frame_path, args=frame_args)
+        vote_list_page = self.vfs.request.web(vote_list_path)
+
+        vote_list_rows_all = vote_list_page.xpath('//div[@id="sect_cont"]/table/tr')
+        vote_list_rows = vote_list_rows_all[1:]
+        vote_list_header_row = vote_list_rows_all[0]
+
+        assert len(vote_list_header_row) == 5
+        assert vote_list_header_row[0].text in ['公告日期', 'Date']
+        assert vote_list_header_row[1].text in ['投票主題', 'Vote Topic']
+        assert vote_list_header_row[2].text in ['開始日期', 'Start']
+        assert vote_list_header_row[3].text in ['結束日期', 'End']
+        assert vote_list_header_row[4].text in ['結果', 'Results']
+
+        for vote_list_row in vote_list_rows:
+            # 公告日期
+            assert len(vote_list_row[0]) == 0
+            vote_ann_date = element_get_text(vote_list_row[0])
+
+            # 投票主題
+            assert len(vote_list_row[1]) == 0
+            vote_topic = element_get_text(vote_list_row[1]).strip()
+
+            # 開始日期
+            assert len(vote_list_row[2]) == 0
+            vote_start_date = element_get_text(vote_list_row[2])
+
+            # 結束日期
+            assert len(vote_list_row[3]) == 0
+            vote_end_date = element_get_text(vote_list_row[3])
+
+            # 結果
+            assert len(vote_list_row[4]) == 1
+            assert vote_list_row[4][0].tag == 'a'
+            assert vote_list_row[4][0].get('onclick')
+
+            vote_result_script = vote_list_row[4][0].get('onclick')
+            vote_result_script_ast = ast.parse(vote_result_script)
+            assert len(vote_result_script_ast.body) == 1
+            assert type(vote_result_script_ast.body[0]) == ast.Expr
+            assert type(vote_result_script_ast.body[0].value) == ast.Call
+            assert vote_result_script_ast.body[0].value.func.value.id == 'window'
+            assert vote_result_script_ast.body[0].value.func.attr == 'open'
+            assert len(vote_result_script_ast.body[0].value.args) == 3
+            vote_result_link = vote_result_script_ast.body[0].value.args[0].s
+
+            vote_result_args = url_to_path_and_args(vote_result_link)[1]
+            vote_vid = vote_result_args['vid']
+
+            vote_file = JSONFile(self.vfs, self)
+            vote_filename = format_filename(vote_vid, vote_topic, 'json')
+
+            vote_file.add(s['attr_course_vote_ann_date'],
+                vote_ann_date, vote_list_path)
+            vote_file.add(s['attr_course_vote_topic'],
+                vote_topic, vote_list_path)
+            vote_file.add(s['attr_course_vote_start_date'],
+                vote_start_date, vote_list_path)
+            vote_file.add(s['attr_course_vote_end_date'],
+                vote_end_date, vote_list_path)
+
+            vote_result_path = '/modules/vote/vote_result.php'
+            vote_result_args = {'vid': vote_vid}
+            vote_result_page = self.vfs.request.web(
+                vote_result_path, args=vote_result_args)
+
+            vote_result_rows = vote_result_page.xpath('/html/body/table/tr')
+            assert len(vote_result_rows) == 3
+
+            # 投票主題這裡又出現一次
+            assert vote_topic == row_get_value(vote_result_rows[0],
+                ['投票主題', 'Vote Topic'], {}, free_form=True)
+
+            # 統計
+            statistics_element = row_get_value(vote_result_rows[1],
+                ['統計', 'Statistics'], {}, free_form=True, return_object=True)
+
+            # 應該可以預期會是 2 到 4 行字，br 標籤數會比行數少一個
+            assert len(statistics_element) >= 1 and \
+                len(statistics_element) <= 3
+            assert list(map(lambda x: x.tag, statistics_element)) == \
+                ['br'] * len(statistics_element)
+
+            statistics_text = list(statistics_element.itertext())
+            statistics_text_kinds = statistics_text[:-1]
+            statistics_text_all = statistics_text[-1]
+
+            separators = [
+                ((['名教師，', 'teacher(s) in total,'],
+                  ['名已投，', 'voted,'],
+                  ['名未投', 'not yet']),
+                 (s['attr_course_vote_teachers_total'],
+                  s['attr_course_vote_teachers_voted'],
+                  s['attr_course_vote_teachers_not_yet'])),
+                ((['名助教，', 'TA(s) in total,'],
+                  ['名已投，', 'voted,'],
+                  ['名未投', 'not yet']),
+                 (s['attr_course_vote_tas_total'],
+                  s['attr_course_vote_tas_voted'],
+                  s['attr_course_vote_tas_not_yet'])),
+                ((['名學生，', 'student(s) in total,'],
+                  ['名已投，', 'voted,'],
+                  ['名未投', 'not yet']),
+                 (s['attr_course_vote_students_total'],
+                  s['attr_course_vote_students_voted'],
+                  s['attr_course_vote_students_not_yet']))]
+
+            for statistics_text_kind in statistics_text_kinds:
+                for possible_kind in separators:
+                    if statistics_text_kind.find(possible_kind[0][0][0]) >= 0 or \
+                        statistics_text_kind.find(possible_kind[0][0][1]) >= 0:
+                        kind = possible_kind
+                        break
+                else:
+                     assert False
+
+                assert len(kind) == 2
+                assert len(kind[0]) == 3
+                assert len(kind[1]) == 3
+
+                for possible_separator in kind[0][0]:
+                    parts = statistics_text_kind.split(possible_separator)
+                    if len(parts) == 2:
+                        total, remaining1 = parts
+                        total = total.strip()
+                        break
+                    assert len(parts) == 1
+                else:
+                    assert False
+                vote_file.add(kind[1][0], total, vote_result_path)
+
+                for possible_separator in kind[0][1]:
+                    parts = remaining1.split(possible_separator)
+                    if len(parts) == 2:
+                        voted, remaining2 = parts
+                        voted = voted.strip()
+                        break
+                    assert len(parts) == 1
+                else:
+                    assert False
+                vote_file.add(kind[1][1], voted, vote_result_path)
+
+                for possible_separator in kind[0][2]:
+                    parts = remaining2.split(possible_separator)
+                    if len(parts) == 2:
+                        not_yet = parts[0].strip()
+                        break
+                    assert len(parts) == 1
+                else:
+                    assert False
+                vote_file.add(kind[1][2], not_yet, vote_result_path)
+
+                del total, voted, not_yet, remaining1, remaining2
+
+            for possible_separator in ['票 (每人)，', 'votes for each,']:
+                parts = statistics_text_all.split(possible_separator)
+                if len(parts) == 2:
+                    vote_votes_for_each, remaining = parts
+                    vote_votes_for_each = vote_votes_for_each.strip()
+                    break
+                assert len(parts) == 1
+            else:
+                assert False
+            vote_file.add(s['attr_course_vote_votes_for_each'],
+                vote_votes_for_each, vote_result_path)
+
+            for possible_separator in ['票 (總計)', 'votes in total']:
+                parts = remaining.split(possible_separator)
+                if len(parts) == 2:
+                    vote_votes_in_total = parts[0].strip()
+                    break
+                assert len(parts) == 1
+            else:
+                assert False
+            vote_file.add(s['attr_course_vote_votes_in_total'],
+                vote_votes_in_total, vote_result_path)
+
+            del remaining
+
+            # 分佈
+            distribution_element = row_get_value(vote_result_rows[2],
+                ['分佈', 'Distribution'], {}, free_form=True, return_object=True)
+            vote_result = list()
+
+            for option_element in distribution_element:
+                assert len(option_element) == 2
+                assert option_element.tag == 'p'
+                assert option_element[0].tag == 'br'
+                assert option_element[1].tag == 'img'
+                assert option_element[1].get('src') == '../../images/vote.jpg'
+                assert option_element[1].get('width')
+
+                option_text = list(option_element.itertext())
+                assert not option_text[1].strip()
+
+                option_name = option_text[0].strip()
+                option_votes_and_percent = option_text[2].strip()
+
+                option_votes, remaining = option_votes_and_percent.split('（')
+                option_votes = option_votes.strip()
+
+                option_percent = remaining.split('）')[0]
+                assert option_percent == option_element[1].get('width')
+
+                vote_result.append({
+                    s['attr_course_vote_result_option']: option_name,
+                    s['attr_course_vote_result_votes']: option_votes,
+                    s['attr_course_vote_result_percent']: option_percent})
+
+                del remaining
+
+            vote_file.add(s['attr_course_vote_result'],
+                vote_result, vote_result_path)
+
+            vote_file.finish()
+            self.add(vote_filename, vote_file)
+
         self.ready = True
 
 class JSONFile(Regular):
