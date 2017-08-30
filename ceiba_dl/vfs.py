@@ -141,7 +141,6 @@ def ceiba_function_enabled(request, course_sn, function, path):
 
 class File:
     def __init__(self, vfs, parent):
-        self.children = None
         self.parent = parent
         self.vfs = vfs
         self.local = True
@@ -181,28 +180,28 @@ class Regular(File):
 class Directory(File):
     def __init__(self, vfs, parent):
         super().__init__(vfs, parent)
-        self.children = list()
+        self._children = list()
 
     def read(self, output, **kwargs):
         if not self.ready:
             self.fetch()
-        output.write(str(self.children).encode() + b'\n')
+        output.write(str(self._children).encode() + b'\n')
 
     def list(self):
         if not self.ready:
             self.fetch()
-        return list(self.children)
+        return self._children
 
     def add(self, name, node, ignore_duplicate=False):
         assert node.parent is self
         assert node.vfs is self.vfs
         name = name.replace('/', '_').strip()
-        if name in map(lambda x: x[0], self.children):
+        if name in map(lambda x: x[0], self._children):
             if ignore_duplicate:
                 return
             else:
                 raise FileExistsError('檔案 {} 已經存在了'.format(name))
-        self.children.append((name, node))
+        self._children.append((name, node))
 
     def access(self, name):
         if name == '.':
@@ -212,15 +211,15 @@ class Directory(File):
         else:
             if not self.ready:
                 self.fetch()
-            for child in self.children:
+            for child in self._children:
                 if child[0] == name:
                     return child[1]
             raise FileNotFoundError('在目前的目錄下找不到 {} 檔案'.format(name))
 
     def unlink(self, name):
-        for index, child in enumerate(self.children):
+        for index, child in enumerate(self._children):
             if child[0] == name:
-                del self.children[index]
+                del self._children[index]
                 return
         raise FileNotFoundError('在目前的目錄下找不到 {} 檔案'.format(name))
 
