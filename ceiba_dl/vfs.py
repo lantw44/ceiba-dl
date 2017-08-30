@@ -118,6 +118,7 @@ def row_get_value(row, expected_keys, value_mappings,
     assert row[1].tag == 'td'
     assert row[0].text in expected_keys
     for source, mapped in value_mappings.items():
+        assert isinstance(source, tuple)
         if row[1].text in source:
             return mapped
     if free_form:
