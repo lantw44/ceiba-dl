@@ -501,7 +501,7 @@ class WebCourseDirectory(Directory):
         if info_basic_semester != self._semester:
             self.vfs.logger.warning(
                 '手動加入的課程 {} （{}）開課學期是 {}，卻被放在 {} 資料夾' \
-                .format(self._sn, self._name, info_basic_name, self._semester))
+                .format(self._sn, self._name, info_basic_semester, self._semester))
 
         # class_no
         info_basic_class_no = row_get_value(info_basic_rows[4],
