@@ -37,6 +37,10 @@ class NoSuchFunctionError(Error):
     def __init__(self, message='NTU CEIBA API 回報無此功能可用，請檢查 mode 參數'):
         self.message = message
 
+class NoneIO:
+    def write(*x):
+        pass
+
 class Request:
     def __init__(self, api_cookies, web_cookies, cipher=None, api_args={'api': '1'},
         api_url='https://ceiba.ntu.edu.tw/course/f03067/app/login.php',
@@ -151,6 +155,29 @@ class Request:
         data.seek(io.SEEK_SET)
         return etree.parse(data, etree.HTMLParser(
             encoding=encoding, remove_comments=True))
+
+    def web_redirect(self, path, args={}):
+        self.logger.debug('準備測試網頁重導向目的地')
+        url = urllib.parse.urljoin(self.web_url, urllib.parse.quote(path))
+        if len(args) > 0:
+            url += '?' + urllib.parse.urlencode(args)
+        self.logger.debug('HTTP 請求網址：{}'.format(url))
+        headers = io.BytesIO()
+        self.curl.setopt(pycurl.URL, url)
+        self.curl.setopt(pycurl.COOKIE, self.web_cookie)
+        self.curl.setopt(pycurl.NOBODY, False)
+        self.curl.setopt(pycurl.NOPROGRESS, True)
+        self.curl.setopt(pycurl.WRITEDATA, NoneIO())
+        self.curl.setopt(pycurl.HEADERFUNCTION, headers.write)
+        self.curl.setopt(pycurl.XFERINFOFUNCTION, lambda *x: None)
+        self.curl.perform()
+        status = self.curl.getinfo(pycurl.RESPONSE_CODE)
+        if status != 302:
+            raise ServerError(status)
+        for header_line in headers.getvalue().split(b'\r\n'):
+            if header_line.startswith(b'Location:'):
+                return header_line.split(b':', maxsplit=1)[1].strip().decode()
+        return None
 
 class Cat:
     def __init__(self, vfs):
