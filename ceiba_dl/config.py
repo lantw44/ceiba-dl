@@ -19,8 +19,8 @@ class Config:
          },
         'strings': {
             'dir_root_courses': '課程',
-            'dir_root_students': '教師',
-            'dir_root_teachers': '學生',
+            'dir_root_students': '學生',
+            'dir_root_teachers': '教師',
             'link_semester_current': '目前',
             'file_course_metadata': '課程資訊.json',
             'attr_course_metadata_name': '名稱',
