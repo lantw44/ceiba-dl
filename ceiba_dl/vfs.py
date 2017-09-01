@@ -4,7 +4,8 @@ from collections import OrderedDict
 from io import BytesIO, StringIO
 from lxml import etree
 from pathlib import PurePosixPath
-from urllib.parse import urlencode, urlsplit, parse_qs
+from urllib.parse import urlencode, urlsplit, parse_qs, quote, unquote
+import ast
 import csv
 import json
 import logging
@@ -19,7 +20,7 @@ class VFS:
         self.root = RootDirectory(self)
         self._edit = edit
 
-    def open(self, path, cwd=None, edit_check=True):
+    def open(self, path, cwd=None, edit_check=True, allow_students=True):
         if edit_check and hasattr(self, '_edit'):
             self._do_edit()
         if cwd == None:
@@ -30,6 +31,8 @@ class VFS:
         for item in path.parts:
             if item.find('/') >= 0:
                 continue
+            if not allow_students and work is self.root.students:
+                return False
             work = work.access(item)
         if not work.ready:
             work.fetch()
@@ -65,10 +68,13 @@ class VFS:
 
         # delete_files
         for path in self._edit['delete_files']:
-            node = self.open(path, edit_check=False)
-            if node is self.root:
-                raise ValueError('不可以刪除根資料夾')
-            node.parent.unlink(PurePosixPath(path).name)
+            node = self.open(path, edit_check=False, allow_students=False)
+            if node:
+                if node is self.root:
+                    raise ValueError('不可以刪除根資料夾')
+                node.parent.unlink(PurePosixPath(path).name)
+            else:
+                self.root.students.queue_deletion_request(path)
 
         # 完成。下次 open 不會再進來了
         del self._edit
@@ -91,16 +97,28 @@ def format_filename(sn, title, extension):
     return '{}.{}'.format(format_dirname(sn, title), extension)
 
 # 把網址轉成 ceiba_dl.Request 可以接受的格式
+# 有些時候網址會有問號，但 CEIBA 不會自己跳脫，這時候可以設定 no_query_string
 
-def url_to_path_and_args(url):
+def url_to_path_and_args(url, no_query_string=False):
+    if no_query_string:
+        url = url.replace('?', '%3F')
     components = urlsplit(url)
     path = components.path
-    query_string = components.query
-    args = parse_qs(query_string, keep_blank_values=True)
-    for key, value in args.items():
-        if isinstance(value, list):
-            assert len(value) == 1
-            args[key] = value[0]
+    if no_query_string:
+        path = unquote(path)
+        # 沒中文字的時候 CEIBA 用 %3F 代表問號（跳脫一次）
+        # 有中文字的時候 CEIBA 用 %253F 代表問號（跳脫兩次）
+        # 注意 ceiba_dl.Request 本身就會跳脫一次，所以這裡至多只會跳脫一次
+        if quote(path.replace('?', '')) != path.replace('?', ''):
+            path = path.replace('?', '%3F')
+        args = {}
+    else:
+        query_string = components.query
+        args = parse_qs(query_string, keep_blank_values=True)
+        for key, value in args.items():
+            if isinstance(value, list):
+                assert len(value) == 1
+                args[key] = value[0]
     return (path, args)
 
 # lxml 遇到沒有文字時回傳 None，但空字串比較好操作
@@ -111,23 +129,52 @@ def element_get_text(element):
 # 從雙欄表格中取得資料的輔助工具
 
 def row_get_value(row, expected_keys, value_mappings,
-    free_form=False, return_object=False):
+    free_form=False, return_object=False, is_teacher_page=False):
 
     assert len(row) == 2
-    assert row[0].tag == 'th'
+    assert isinstance(expected_keys, list)
+    if is_teacher_page:
+        assert row[0].tag == 'td'
+    else:
+        assert row[0].tag == 'th'
     assert row[1].tag == 'td'
-    assert row[0].text in expected_keys
+    if is_teacher_page and len(row[0]) > 0:
+        assert len(row[0]) == 1
+        assert row[0][0].tag == 'font'
+        assert ''.join(row[0].itertext()) in expected_keys
+    else:
+        assert row[0].text in expected_keys
     for source, mapped in value_mappings.items():
         assert isinstance(source, tuple)
+        assert not is_teacher_page
         if row[1].text in source:
             return mapped
     if free_form:
         if return_object:
             return row[1]
+        elif is_teacher_page:
+            if len(row[1]) > 0:
+                assert len(row[1]) == 1
+                assert row[1][0].tag == 'font'
+                return list(row[1].itertext())
+            else:
+                return [ element_get_text(row[1]) ]
         else:
             return element_get_text(row[1])
     else:
         assert False
+
+# 有些網頁連結是用 JavaScript 的 window.open 做的
+def js_window_open_get_url(js_script):
+    # 借用 Python parser 來讀 JavaScript code
+    python_ast = ast.parse(js_script)
+    assert len(python_ast.body) == 1
+    assert type(python_ast.body[0]) == ast.Expr
+    assert type(python_ast.body[0].value) == ast.Call
+    assert python_ast.body[0].value.func.value.id == 'window'
+    assert python_ast.body[0].value.func.attr == 'open'
+    assert len(python_ast.body[0].value.args) == 3
+    return python_ast.body[0].value.args[0].s
 
 # 在真正開始爬網頁前先檢查功能是否開啟
 
@@ -258,10 +305,25 @@ class RootDirectory(Directory):
     def __init__(self, vfs):
         super().__init__(vfs, self)
         s = self.vfs.strings
-        self.add(s['dir_root_courses'], RootCoursesDirectory(self.vfs, self))
-        self.add(s['dir_root_students'], RootStudentsDirectory(self.vfs, self))
-        self.add(s['dir_root_teachers'], RootTeachersDirectory(self.vfs, self))
+        self._courses = RootCoursesDirectory(self.vfs, self)
+        self._students = RootStudentsDirectory(self.vfs, self)
+        self._teachers = RootTeachersDirectory(self.vfs, self)
+        self.add(s['dir_root_courses'], self._courses)
+        self.add(s['dir_root_students'], self._students)
+        self.add(s['dir_root_teachers'], self._teachers)
         self.ready = True
+
+    @property
+    def courses(self):
+        return self._courses
+
+    @property
+    def students(self):
+        return self._students
+
+    @property
+    def teachers(self):
+        return self._teachers
 
 class RootCoursesDirectory(Directory):
     def __init__(self, vfs, parent):
@@ -279,14 +341,405 @@ class RootCoursesDirectory(Directory):
             self.add(name, SemesterDirectory(self.vfs, self, name))
         self.ready = True
 
+    def _create_course_list_map(self):
+        course_list_page = self.vfs.request.web('/student/index.php')
+        course_list_rows_all = course_list_page.xpath('//table[1]/tr')
+        course_list_rows = course_list_rows_all[1:]
+        course_list_header_row = course_list_rows_all[0]
+
+        assert len(course_list_header_row) == 8
+        assert course_list_header_row[0].text in ['學期', 'Semester']
+        assert course_list_header_row[1].text in ['授課對象', 'Designated for']
+        assert course_list_header_row[2].text in ['課號', 'Course No']
+        assert course_list_header_row[3].text in ['班次', 'Class']
+        assert course_list_header_row[4].text in ['課程名稱', 'Course Title']
+        assert course_list_header_row[5].text in ['教師', 'Instructor']
+        assert course_list_header_row[6].text in ['課程助教', 'TA']
+        assert course_list_header_row[7].text in ['網頁助教', 'Web Assistant']
+
+        self._course_list_map = dict()
+        for row in course_list_rows:
+            assert len(row[4]) == 2
+            assert row[4][0].tag == 'a'
+            assert row[4][0].get('href')
+            assert row[4][1].tag == 'br'
+
+            course_path = url_to_path_and_args(row[4][0].get('href'))[0]
+            location = self.vfs.request.web_redirect(course_path)
+            assert location
+
+            redirected_path, redirected_args = url_to_path_and_args(location)
+            if redirected_path == '/login_test.php':
+                assert set(redirected_args.keys()) == set(['csn'])
+                self._course_list_map[redirected_args['csn']] = row
+            elif redirected_path.startswith('/course/') and \
+                redirected_path.endswith('/index.htm'):
+                assert redirected_args == {}
+                self._course_list_map[redirected_path.split('/')[2]] = row
+            else:
+                assert False
+
+    def search_course_list(self, sn):
+        if not hasattr(self, '_course_list_map'):
+            self._create_course_list_map()
+        return self._course_list_map[sn]
+
 class RootStudentsDirectory(Directory):
     def __init__(self, vfs, parent):
         super().__init__(vfs, parent)
+        self._course_status_cache = dict()
         self.ready = True
+
+    def access(self, name):
+        if name not in ['.', '..'] and \
+            name not in map(lambda x: x[0], self._children):
+            self.add_student(name)
+        return super().access(name)
+
+    def _is_student_function_enabled(self, sn):
+        if sn not in self._course_status_cache:
+            self._course_status_cache[sn] = \
+                ceiba_function_enabled(self.vfs.request, sn,
+                    'student', '/modules/student/stu_person.php')
+        return self._course_status_cache[sn]
+
+    def add_student(self, account, sn=None, pwd=None):
+        s = self.vfs.strings
+
+        if sn and (not hasattr(self, '_last_sn') or sn != self._last_sn) and \
+            self._is_student_function_enabled(sn):
+            self._last_sn = sn
+
+        if hasattr(self, '_last_sn'):
+            if hasattr(self, '_queued_addition_requests'):
+                queued_addition_requests = self._queued_addition_requests.keys()
+                del self._queued_addition_requests
+                for request in queued_addition_requests:
+                    self.add(request, StudentsStudentDirectory(
+                        self.vfs, self, request))
+            if hasattr(self, '_queued_deletion_requests'):
+                queued_deletion_requests = self._queued_deletion_requests.keys()
+                del self._queued_deletion_requests
+                for request in queued_deletion_requests:
+                    node = self.vfs.open(request, edit_check=False)
+                    node.parent.unlink(PurePosixPath(request).name)
+            if account not in map(lambda x: x[0], self._children):
+                self.add(account, StudentsStudentDirectory(
+                    self.vfs, self, account))
+        else:
+            if not hasattr(self, '_queued_addition_requests'):
+                self._queued_addition_requests = OrderedDict()
+            self._queued_addition_requests[account] = None
+
+        if pwd:
+            depth = 0
+            while pwd is not self.vfs.root:
+                pwd = pwd.parent
+                depth += 1
+            return PurePosixPath('../' * depth,
+                s['dir_root_students'], account).as_posix()
+
+    def queue_deletion_request(self, path):
+        assert not hasattr(self, '_last_sn')
+        if not hasattr(self, '_queued_deletion_requests'):
+            self._queued_deletion_requests = OrderedDict()
+        self._queued_deletion_requests[path] = None
+
+    @property
+    def last_sn(self):
+        return self._last_sn
 
 class RootTeachersDirectory(Directory):
     def __init__(self, vfs, parent):
         super().__init__(vfs, parent)
+        self._is_teacher_cache = dict()
+        self.ready = True
+
+    def access(self, name):
+        if name not in ['.', '..'] and \
+            name not in map(lambda x: x[0], self._children) and \
+            self.is_teacher(name):
+            self.add_teacher(name)
+        return super().access(name)
+
+    def add_teacher(self, account, pwd=None):
+        s = self.vfs.strings
+        if account not in map(lambda x: x[0], self._children):
+            self.add(account, TeachersTeacherDirectory(self.vfs, self, account))
+        if pwd:
+            depth = 0
+            while pwd is not self.vfs.root:
+                pwd = pwd.parent
+                depth += 1
+            return PurePosixPath('../' * depth,
+                s['dir_root_teachers'], account).as_posix()
+
+    def is_teacher(self, account):
+        if account not in self._is_teacher_cache:
+            teacher_path = '/student/teacher.php'
+            teacher_args = {'op': 's2', 'td': account}
+            self._is_teacher_cache[account] = len(self.vfs.request.web(
+                teacher_path, args=teacher_args).xpath('//table')) > 0
+        return self._is_teacher_cache[account]
+
+class TeachersTeacherDirectory(Directory):
+    def __init__(self, vfs, parent, account):
+        super().__init__(vfs, parent)
+        self._account = account
+
+    def fetch(self):
+        s = self.vfs.strings
+        teacher_path = '/student/teacher.php'
+        teacher_args = {'op': 's2', 'td': self._account}
+        teacher_page = self.vfs.request.web(teacher_path, args=teacher_args)
+
+        if len(teacher_page.xpath('//table')) == 0:
+            self.add('{}.txt'.format(self._account), StringFile(
+                self.vfs, self, '此老師無計中帳號資料！！\n'))
+            self.ready = True
+            return
+
+        teacher_rows = teacher_page.xpath('/html/body/table[2]/tr/td/table/tr')
+        assert len(teacher_rows) == 9
+
+        teacher_file = JSONFile(self.vfs, self)
+        teacher_filename = '{}.json'.format(self._account)
+        self.add(teacher_filename, teacher_file)
+
+        # 姓名
+        teacher_name = row_get_value(
+            teacher_rows[0], ['姓名：', 'Name：'],
+            {}, free_form=True, is_teacher_page=True)
+        assert len(teacher_name) == 1
+        teacher_name = teacher_name[0].strip()
+        teacher_file.add(s['attr_teachers_name'], teacher_name, teacher_path)
+
+        # 所屬院系所
+        teacher_department = row_get_value(
+            teacher_rows[1], ['所屬院系所：', 'College & Dept：'],
+            {}, free_form=True, is_teacher_page=True)
+        assert len(teacher_department) == 1
+        teacher_department = ' '.join(teacher_department[0].split())
+        teacher_file.add(s['attr_teachers_department'],
+            teacher_department, teacher_path)
+
+        # 職稱
+        teacher_title = row_get_value(
+            teacher_rows[2], ['職稱：', 'Position：'],
+            {}, free_form=True, is_teacher_page=True)
+        assert len(teacher_title) == 1
+        teacher_title = teacher_title[0].strip()
+        teacher_file.add(s['attr_teachers_title'], teacher_title, teacher_path)
+
+        # 個人首頁網址
+        teacher_url = row_get_value(
+            teacher_rows[3], ['個人首頁網址：', 'Homepage URL：'],
+            {}, free_form=True, is_teacher_page=True)
+        assert len(teacher_url) == 1
+        teacher_url = teacher_url[0].strip()
+        teacher_file.add(s['attr_teachers_url'], teacher_url, teacher_path)
+
+        # 電子郵件
+        teacher_email = row_get_value(
+            teacher_rows[4], ['電子郵件：', 'Email：'],
+            {}, free_form=True, is_teacher_page=True)
+        assert len(teacher_email) == 1
+        teacher_email = teacher_email[0].strip()
+        teacher_file.add(s['attr_teachers_email'], teacher_email, teacher_path)
+
+        # 聯絡電話
+        teacher_phones = row_get_value(
+            teacher_rows[5], ['聯絡電話：', 'Phone：'],
+            {}, free_form=True, is_teacher_page=True)
+        if len(teacher_phones) >= 2:
+            assert len(teacher_phones) == 3
+            assert teacher_phones[2].isspace()
+            teacher_phone_others = ' '.join(teacher_phones[1].split())
+            assert teacher_phone_others.startswith('其他電話:')
+            teacher_phone_others = teacher_phone_others[5:]
+        else:
+            teacher_phone_others = ''
+        assert len(teacher_phones) >= 1
+        teacher_phone = ' '.join(teacher_phones[0].split())
+        teacher_file.add(s['attr_teachers_phone'], teacher_phone, teacher_path)
+        teacher_file.add(s['attr_teachers_phone_others'],
+            teacher_phone_others, teacher_path)
+
+        # 辦公室：
+        teacher_office = row_get_value(
+            teacher_rows[6], ['辦公室：', 'Office：'],
+            {}, free_form=True, is_teacher_page=True)
+        assert len(teacher_office) == 1
+        teacher_office = ' '.join(teacher_office[0].split())
+        teacher_file.add(s['attr_teachers_office'], teacher_office, teacher_path)
+
+        # 照片
+        teacher_picture_element = row_get_value(
+            teacher_rows[7], ['照片：', 'Photo：'],
+            {}, free_form=True, is_teacher_page=True, return_object=True)
+        assert len(teacher_picture_element) == 1
+        assert teacher_picture_element[0].tag == 'font'
+        if len(teacher_picture_element[0]) > 0:
+            assert len(teacher_picture_element[0]) == 1
+            assert teacher_picture_element[0][0].tag == 'img'
+            assert teacher_picture_element[0][0].get('src')
+            teacher_picture = teacher_picture_element[0][0].get('src') \
+                .rsplit('/', maxsplit=1)[1]
+            teacher_picture_path = '{}/{}'.format(
+                teacher_path.rsplit('/', maxsplit=1)[0],
+                teacher_picture_element[0][0].get('src'))
+            self.add(teacher_picture, DownloadFile(self.vfs, self,
+                teacher_picture_path))
+        else:
+            teacher_picture = ''
+        teacher_file.add(s['attr_teachers_picture'],
+            teacher_picture, teacher_path)
+
+        # 更多的個人資訊
+        teacher_more_element = row_get_value(teacher_rows[8], ['\xa0'],
+            {}, free_form=True, is_teacher_page=True, return_object=True)
+        assert list(map(lambda x: x.tag, teacher_more_element)) == \
+            ['br'] * len(teacher_more_element)
+        teacher_more = ''.join(teacher_more_element.itertext()).replace('\r', '\n')
+        teacher_file.add(s['attr_teachers_more'], teacher_more, teacher_path)
+
+        teacher_file.finish()
+        self.ready = True
+
+class StudentsStudentDirectory(Directory):
+    def __init__(self, vfs, parent, account):
+        super().__init__(vfs, parent)
+        self._account = account
+
+    def fetch(self):
+        s = self.vfs.strings
+        sn = self.vfs.root.students.last_sn
+
+        frame_path = '/modules/index.php'
+        frame_args = {'csn': sn, 'default_fun': 'info'}
+
+        student_path = '/modules/student/stu_person.php'
+        student_args = {'stu': self._account}
+
+        self.vfs.request.web(frame_path, args=frame_args)
+        student_page = self.vfs.request.web(student_path, args=student_args)
+        assert len(student_page.xpath('//table')) > 0
+
+        student_rows = student_page.xpath('//div[@id="sect_cont"]/table/tr')
+        assert len(student_rows) == 12
+
+        student_file = JSONFile(self.vfs, self)
+        student_filename = '{}.json'.format(self._account, sn)
+        self.add(student_filename, student_file)
+
+        # 身份
+        student_role = row_get_value(student_rows[0],
+            ['身份', 'Role'], {}, free_form=True).strip()
+        student_file.add(s['attr_students_role'], student_role, student_path)
+
+        # 照片
+        student_photo_element = row_get_value(student_rows[1],
+            ['照片', 'Photo'], {}, free_form=True, return_object=True)
+        if len(student_photo_element) > 0:
+            assert len(student_photo_element) == 1
+            assert student_photo_element[0].tag == 'img'
+            assert student_photo_element[0].get('src')
+            student_photo = student_photo_element[0].get('src') \
+                .rsplit('/', maxsplit=1)[1]
+            student_photo_path = url_to_path_and_args(
+                student_photo_element[0].get('src'), no_query_string=True)[0]
+            self.add(student_photo, DownloadFile(self.vfs, self,
+                student_photo_path))
+        else:
+            student_photo = ''
+        student_file.add(s['attr_students_photo'], student_photo, student_path)
+
+        # 姓名
+        student_name = row_get_value(student_rows[2],
+            ['姓名', 'Name'], {}, free_form=True).strip()
+        student_file.add(s['attr_students_name'], student_name, student_path)
+
+        # 英文姓名
+        student_english_name = row_get_value(student_rows[3],
+            ['英文姓名', 'English Name'], {}, free_form=True).strip()
+        student_file.add(s['attr_students_english_name'],
+            student_english_name, student_path)
+
+        # 匿名代號
+        student_screen_name = row_get_value(student_rows[4],
+            ['匿名代號', 'Screen Name'], {}, free_form=True).strip()
+        student_file.add(s['attr_students_screen_name'],
+            student_screen_name, student_path)
+
+        # 學校系級
+        student_school_year = row_get_value(student_rows[5],
+            ['系級', 'Major & Year', '學校系級', 'School & Dept'],
+            {}, free_form=True).strip()
+        student_file.add(s['attr_students_school_year'],
+            student_school_year, student_path)
+
+        # 個人首頁網址
+        student_homepage_url_element = row_get_value(student_rows[6],
+            ['個人首頁網址', 'Homepage URL'], {}, free_form=True, return_object=True)
+        assert len(student_homepage_url_element) == 1
+        assert student_homepage_url_element[0].tag == 'a'
+        assert student_homepage_url_element[0].get('href')
+        student_homepage_url = element_get_text(student_homepage_url_element[0])
+        assert student_homepage_url_element[0].get('href') == \
+            student_homepage_url or \
+            student_homepage_url_element[0].get('href') == \
+            'http://' + student_homepage_url
+        student_file.add(s['attr_students_homepage_url'],
+            student_homepage_url, student_path)
+
+        # 電子郵件
+        student_email_address_element = row_get_value(student_rows[7],
+            ['電子郵件', 'Email Address'], {}, free_form=True, return_object=True)
+        assert len(student_email_address_element) == 1
+        assert student_email_address_element[0].tag == 'a'
+        assert student_email_address_element[0].get('href')
+        student_email_address = element_get_text(student_email_address_element[0])
+        assert student_email_address_element[0].get('href') == \
+            'mailto:' + student_email_address
+        student_file.add(s['attr_students_email_address'],
+            student_email_address, student_path)
+
+        # 常用電子郵件
+        student_frequently_used_email_element = row_get_value(student_rows[8],
+            ['常用電子郵件', 'Frequently Used Email'],
+            {}, free_form=True, return_object=True)
+        assert len(student_frequently_used_email_element) == 1
+        assert student_frequently_used_email_element[0].tag == 'a'
+        assert student_frequently_used_email_element[0].get('href')
+        student_frequently_used_email = element_get_text(
+            student_frequently_used_email_element[0])
+        assert student_frequently_used_email_element[0].get('href') == \
+            'mailto:' + student_frequently_used_email
+        student_file.add(s['attr_students_frequently_used_email'],
+            student_frequently_used_email, student_path)
+
+        # 聯絡電話
+        student_phone = row_get_value(student_rows[9],
+            ['聯絡電話', 'Phone'], {}, free_form=True).strip()
+        student_file.add(s['attr_students_phone'], student_phone, student_path)
+
+        # 聯絡地址
+        student_address = row_get_value(student_rows[10],
+            ['聯絡地址', 'Address'], {}, free_form=True).strip()
+        student_file.add(s['attr_students_address'],
+            student_address, student_path)
+
+        # 更多的個人資訊
+        student_more_personal_information_element = row_get_value(student_rows[11],
+            ['更多的個人資訊', 'More Personal Information'],
+            {}, free_form=True, return_object=True)
+        assert len(student_more_personal_information_element) == 0
+        student_more_personal_information = ''.join(
+            student_more_personal_information_element.itertext())
+        student_file.add(s['attr_students_more_personal_information'],
+            student_more_personal_information, student_path)
+
+        student_file.finish()
         self.ready = True
 
 class SemesterDirectory(Directory):
@@ -469,6 +922,14 @@ class CourseDirectory(Directory):
             self.add(s['dir_course_vote'], CourseVoteDirectory(
                 self.vfs, self, self._sn))
 
+        # teacher_info
+        self.add(s['dir_course_teachers'], CourseTeacherInfoDirectory(
+            self.vfs, self, self._sn, result['teacher_info']))
+
+        # 修課學生
+        self.add(s['dir_course_students'], CourseRosterDirectory(
+            self.vfs, self, self._sn))
+
         self.ready = True
 
 class WebCourseDirectory(Directory):
@@ -554,6 +1015,14 @@ class WebCourseDirectory(Directory):
             'vote', '/modules/vote/vote.php'):
             self.add(s['dir_course_vote'], CourseVoteDirectory(
                 self.vfs, self, self._sn))
+
+        # 教師資訊
+        self.add(s['dir_course_teachers'], CourseTeacherInfoDirectory(
+            self.vfs, self, self._sn, []))
+
+        # 修課學生
+        self.add(s['dir_course_students'], CourseRosterDirectory(
+            self.vfs, self, self._sn))
 
         self.ready = True
 
@@ -722,6 +1191,7 @@ class CourseBoardsThreadDirectory(Directory):
         for sn, thread in threads.items():
             thread_dir = Directory(self.vfs, self)
             thread_attachments = list()
+            collected_accounts = OrderedDict()
             for post in thread:
                 post_node = JSONFile(self.vfs, thread_dir)
                 post_node.add(s['attr_course_boards_thread_sn'], post['sn'], 'sn')
@@ -743,6 +1213,7 @@ class CourseBoardsThreadDirectory(Directory):
                             (post['sn'], post['attach'], post['file_path']))
                 post_node.add(s['attr_course_boards_thread_author'],
                     post['author'], 'author')
+                collected_accounts[post['author']] = None
                 post_node.add(s['attr_course_boards_thread_cauthor'],
                     post['cauthor'], 'cauthor')
                 post_node.add(s['attr_course_boards_thread_count_rep'],
@@ -771,6 +1242,17 @@ class CourseBoardsThreadDirectory(Directory):
                     post['sn'], post['subject'], 'html')
                 thread_dir.add(post_node_filename, post_node)
                 thread_dir.add(post_content_filename, post_content)
+            for account in collected_accounts.keys():
+                if quote(account) != account:
+                    continue
+                if self.vfs.root.teachers.is_teacher(account):
+                    thread_dir.add(account, InternalLink(self.vfs, thread_dir,
+                        self.vfs.root.teachers.add_teacher(
+                            account, pwd=thread_dir)))
+                else:
+                    thread_dir.add(account, InternalLink(self.vfs, thread_dir,
+                        self.vfs.root.students.add_student(
+                            account, sn=self._course_sn, pwd=thread_dir)))
             if len(thread_attachments):
                 files_dir = Directory(self.vfs, thread_dir)
                 for attachment in thread_attachments:
@@ -1226,6 +1708,12 @@ class CourseHomeworksHomeworkDirectory(Directory):
                 hw_eval_list_file.add([
                     hw_eval_row_id, hw_eval_row_grades, hw_eval_row_comments])
 
+                if hw_eval_row_id and not hw_eval_row_id.startswith('*') and \
+                    quote(hw_eval_row_id) == hw_eval_row_id:
+                    hw_eval_dir.add(hw_eval_row_id, InternalLink(
+                        self.vfs, hw_eval_dir, self.vfs.root.students.add_student(
+                            hw_eval_row_id, sn=self._course_sn, pwd=hw_eval_dir)))
+
             hw_eval_list_file.finish()
             self.add(s['dir_course_homeworks_homework_eval'], hw_eval_dir)
             hw_eval_dir.ready = True
@@ -1280,14 +1768,7 @@ class CourseHomeworksHomeworkDirectory(Directory):
 
                 # 借用 Python parser 來讀 JavaScript code
                 student_hw_script = row[1][0].get('onclick')
-                student_hw_script_ast = ast.parse(student_hw_script)
-                assert len(student_hw_script_ast.body) == 1
-                assert type(student_hw_script_ast.body[0]) == ast.Expr
-                assert type(student_hw_script_ast.body[0].value) == ast.Call
-                assert student_hw_script_ast.body[0].value.func.value.id == 'window'
-                assert student_hw_script_ast.body[0].value.func.attr == 'open'
-                assert len(student_hw_script_ast.body[0].value.args) == 3
-                student_hw_link = student_hw_script_ast.body[0].value.args[0].s
+                student_hw_link = js_window_open_get_url(student_hw_script)
 
                 # 從網址的 query string 找出學號
                 student_hw_path, student_hw_args = \
@@ -1323,6 +1804,10 @@ class CourseHomeworksHomeworkDirectory(Directory):
                     student_dir.add(
                         s['dir_course_homeworks_homework_great_assignments_assignment'],
                         student_assignment_dir)
+
+                student_dir.add(student_id, InternalLink(self.vfs, student_dir,
+                    self.vfs.root.students.add_student(
+                        student_id, sn=self._course_sn, pwd=student_dir)))
 
                 student_dir.ready = True
                 great_dir.add(student_dirname, student_dir)
@@ -1861,6 +2346,7 @@ class CourseShareDirectory(Directory):
             share_list_dirname = share_type_attr[3]
             share_show_fields = share_type_attr[4]
 
+            collected_accounts = OrderedDict()
             share_list_dir = Directory(self.vfs, self)
 
             for share_list_row in share_list_rows:
@@ -1909,6 +2395,9 @@ class CourseShareDirectory(Directory):
                     share_shared_by, share_list_path)
                 share_file.add(s['attr_course_share_author_email'],
                     share_shared_by_email, share_list_path)
+
+                if share_shared_by_email.endswith('@ntu.edu.tw'):
+                    collected_accounts[share_shared_by_email.split('@')[0]] = None
 
                 # 評分
                 assert len(share_list_row[3]) == 0
@@ -2095,6 +2584,16 @@ class CourseShareDirectory(Directory):
                 share_file.finish()
                 share_list_dir.add(share_filename, share_file)
 
+            for account in collected_accounts.keys():
+                if self.vfs.root.teachers.is_teacher(account):
+                    share_list_dir.add(account, InternalLink(self.vfs,
+                        share_list_dir, self.vfs.root.teachers.add_teacher(
+                            account, pwd=share_list_dir)))
+                else:
+                    share_list_dir.add(account, InternalLink(self.vfs,
+                        share_list_dir, self.vfs.root.students.add_student(
+                            account, sn=self._course_sn, pwd=share_list_dir)))
+
             self.add(share_list_dirname, share_list_dir)
             share_list_dir.ready = True
 
@@ -2106,7 +2605,6 @@ class CourseVoteDirectory(Directory):
         self._course_sn = course_sn
 
     def fetch(self):
-        import ast
         s = self.vfs.strings
 
         frame_path = '/modules/index.php'
@@ -2151,14 +2649,7 @@ class CourseVoteDirectory(Directory):
             assert vote_list_row[4][0].get('onclick')
 
             vote_result_script = vote_list_row[4][0].get('onclick')
-            vote_result_script_ast = ast.parse(vote_result_script)
-            assert len(vote_result_script_ast.body) == 1
-            assert type(vote_result_script_ast.body[0]) == ast.Expr
-            assert type(vote_result_script_ast.body[0].value) == ast.Call
-            assert vote_result_script_ast.body[0].value.func.value.id == 'window'
-            assert vote_result_script_ast.body[0].value.func.attr == 'open'
-            assert len(vote_result_script_ast.body[0].value.args) == 3
-            vote_result_link = vote_result_script_ast.body[0].value.args[0].s
+            vote_result_link = js_window_open_get_url(vote_result_script)
 
             vote_result_args = url_to_path_and_args(vote_result_link)[1]
             vote_vid = vote_result_args['vid']
@@ -2330,6 +2821,125 @@ class CourseVoteDirectory(Directory):
 
             vote_file.finish()
             self.add(vote_filename, vote_file)
+
+        self.ready = True
+
+class CourseTeacherInfoDirectory(Directory):
+    def __init__(self, vfs, parent, course_sn, teacher_info):
+        super().__init__(vfs, parent)
+        self._course_sn = course_sn
+        self._teacher_info = teacher_info
+
+    def fetch(self):
+        s = self.vfs.strings
+        teacher_info_keys = ['account', 'tr_msid',
+            'cname', 'ename', 'email', 'phone', 'address']
+        collected_accounts = OrderedDict()
+
+        for teacher in self._teacher_info:
+            assert set(teacher.keys()) == set(teacher_info_keys)
+            assert teacher['account']
+            teacher_file = JSONFile(self.vfs, self)
+
+            teacher_file.add(s['attr_course_teachers_account'],
+                teacher['account'], 'account')
+
+            if teacher['tr_msid'] == '0':
+                teacher_file.add(s['attr_course_teachers_tr_msid'],
+                    s['value_course_teachers_tr_msid_0'], 'tr_msid')
+            elif teacher['tr_msid'] == '1':
+                teacher_file.add(s['attr_course_teachers_tr_msid'],
+                    s['value_course_teachers_tr_msid_1'], 'tr_msid')
+            else:
+                assert False
+
+            teacher_file.add(s['attr_course_teachers_cname'],
+                teacher['cname'], 'cname')
+            teacher_file.add(s['attr_course_teachers_ename'],
+                teacher['ename'], 'ename')
+            teacher_file.add(s['attr_course_teachers_email'],
+                teacher['email'], 'email')
+            teacher_file.add(s['attr_course_teachers_phone'],
+                teacher['phone'], 'phone')
+            teacher_file.add(s['attr_course_teachers_address'],
+                teacher['address'], 'address')
+
+            teacher_file.finish()
+            teacher_filename = '{}.json'.format(teacher['account'])
+            self.add(teacher_filename, teacher_file)
+            collected_accounts[teacher['account']] = None
+
+        course_list_row = self.vfs.root.courses.search_course_list(self._course_sn)
+        assert len(course_list_row[5]) == 1
+        assert course_list_row[5][0].tag == 'a'
+        assert course_list_row[5][0].get('onclick')
+        teacher_script = course_list_row[5][0].get('onclick')
+        teacher_link = js_window_open_get_url(teacher_script)
+        collected_accounts[url_to_path_and_args(teacher_link)[1]['td']] = None
+
+        for account in collected_accounts.keys():
+            self.add(account, InternalLink(self.vfs, self,
+                self.vfs.root.teachers.add_teacher(account, pwd=self)))
+
+        self.ready = True
+
+class CourseRosterDirectory(Directory):
+    def __init__(self, vfs, parent, course_sn):
+        super().__init__(vfs, parent)
+        self._course_sn = course_sn
+
+    def fetch(self):
+        s = self.vfs.strings
+        collected_accounts = OrderedDict()
+
+        roster_path = '/modules/student/print.php'
+        roster_args = {'course_sn': self._course_sn,
+            'sort': 'student', 'current_lang': 'chinese'}
+        roster_page = self.vfs.request.web(roster_path, args=roster_args)
+
+        roster_rows_all = roster_page.xpath('//table/tr')
+        roster_rows = roster_rows_all[1:]
+        roster_header_row = roster_rows_all[0]
+
+        assert len(roster_header_row) == 8
+        assert roster_header_row[0].text in ['身份', 'Role']
+        assert roster_header_row[1].text in ['系所', 'Department']
+        assert roster_header_row[2].text in ['學號', 'ID']
+        assert roster_header_row[3].text in ['姓名', 'Name']
+        assert roster_header_row[4].text in ['英文姓名', 'English Name']
+        assert roster_header_row[5].text in ['照片', 'Photo']
+        assert roster_header_row[6].text in ['電子郵件', 'E-mail']
+        assert roster_header_row[7].text in ['組別', 'Group']
+
+        for row in roster_rows:
+            student_file = JSONFile(self.vfs, self)
+            student_file.add(s['attr_course_students_role'],
+                element_get_text(row[0]).strip(), roster_path)
+            student_file.add(s['attr_course_students_department'],
+                element_get_text(row[1]).strip(), roster_path)
+
+            student_id = element_get_text(row[2]).strip()
+            student_file.add(s['attr_course_students_id'],
+                student_id, roster_path)
+
+            student_file.add(s['attr_course_students_name'],
+                element_get_text(row[3]).strip(), roster_path)
+            student_file.add(s['attr_course_students_english_name'],
+                element_get_text(row[4]).strip(), roster_path)
+            student_file.add(s['attr_course_students_email'],
+                element_get_text(row[6]).strip(), roster_path)
+            student_file.add(s['attr_course_students_group'],
+                element_get_text(row[7]).strip(), roster_path)
+
+            student_file.finish()
+            student_filename = '{}.json'.format(student_id)
+            self.add(student_filename, student_file)
+            collected_accounts[student_id] = None
+
+        for account in collected_accounts.keys():
+            self.add(account, InternalLink(self.vfs, self,
+                self.vfs.root.students.add_student(
+                    account, sn=self._course_sn, pwd=self)))
 
         self.ready = True
 
