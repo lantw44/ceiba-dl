@@ -195,6 +195,7 @@ class Directory(File):
     def add(self, name, node, ignore_duplicate=False):
         assert node.parent is self
         assert node.vfs is self.vfs
+        assert len(name) > 0
         name = name.replace('/', '_').strip()
         if name in map(lambda x: x[0], self._children):
             if ignore_duplicate:
