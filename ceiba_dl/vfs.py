@@ -930,6 +930,17 @@ class CourseDirectory(Directory):
         self.add(s['dir_course_students'], CourseRosterDirectory(
             self.vfs, self, self._sn))
 
+        # 課程助教
+        course_list_row = self.vfs.root.courses.search_course_list(self._sn)
+        if len(course_list_row[6]) > 0:
+            self.add(s['dir_course_teaching_assistants'],
+                CourseAssistantsDirectory(self.vfs, self, course_list_row[6]))
+
+        # 網頁助教
+        if len(course_list_row[7]) > 0:
+            self.add(s['dir_course_web_assistants'],
+                CourseAssistantsDirectory(self.vfs, self, course_list_row[7]))
+
         self.ready = True
 
 class WebCourseDirectory(Directory):
@@ -1023,6 +1034,17 @@ class WebCourseDirectory(Directory):
         # 修課學生
         self.add(s['dir_course_students'], CourseRosterDirectory(
             self.vfs, self, self._sn))
+
+        # 課程助教
+        course_list_row = self.vfs.root.courses.search_course_list(self._sn)
+        if len(course_list_row[6]) > 0:
+            self.add(s['dir_course_teaching_assistants'],
+                CourseAssistantsDirectory(self.vfs, self, course_list_row[6]))
+
+        # 網頁助教
+        if len(course_list_row[7]) > 0:
+            self.add(s['dir_course_web_assistants'],
+                CourseAssistantsDirectory(self.vfs, self, course_list_row[7]))
 
         self.ready = True
 
@@ -2396,7 +2418,8 @@ class CourseShareDirectory(Directory):
                 share_file.add(s['attr_course_share_author_email'],
                     share_shared_by_email, share_list_path)
 
-                if share_shared_by_email.endswith('@ntu.edu.tw'):
+                if share_shared_by_email.endswith('@ntu.edu.tw') or \
+                    share_shared_by_email.endswith('@csie.ntu.edu.tw'):
                     collected_accounts[share_shared_by_email.split('@')[0]] = None
 
                 # 評分
@@ -2940,6 +2963,48 @@ class CourseRosterDirectory(Directory):
             self.add(account, InternalLink(self.vfs, self,
                 self.vfs.root.students.add_student(
                     account, sn=self._course_sn, pwd=self)))
+
+        self.ready = True
+
+class CourseAssistantsDirectory(Directory):
+    def __init__(self, vfs, parent, cell):
+        super().__init__(vfs, parent)
+        self._cell = cell
+
+    def fetch(self):
+        s = self.vfs.strings
+
+        assert not element_get_text(self._cell).strip()
+        for child in self._cell:
+            assert child.tag == 'a' or child.tag == 'br'
+
+        collected_accounts = OrderedDict()
+        for index, link in enumerate(self._cell.xpath('./a')):
+            assistant_name = link.text
+            assistant_email = link.get('href')
+            assert assistant_name
+            assert assistant_email.startswith('mailto:')
+            assistant_email = assistant_email[7:]
+
+            assistant_file = JSONFile(self.vfs, self)
+            assistant_filename = '{:02} {}.json'.format(
+                index + 1, assistant_name)
+
+            assistant_file.add(s['attr_course_assistants_name'],
+                assistant_name, '/student/index.php')
+            assistant_file.add(s['attr_course_assistants_email'],
+                assistant_email, '/student/index.php')
+
+            assistant_file.finish()
+            self.add(assistant_filename, assistant_file)
+
+            if assistant_email.endswith('@ntu.edu.tw') or \
+                assistant_email.endswith('@csie.ntu.edu.tw'):
+                collected_accounts[assistant_email.split('@')[0]] = None
+
+        for account in collected_accounts.keys():
+            self.add(account, InternalLink(self.vfs, self,
+                self.vfs.root.students.add_student(account, pwd=self)))
 
         self.ready = True
 
