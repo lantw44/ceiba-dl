@@ -1549,8 +1549,9 @@ class CourseHomeworksHomeworkDirectory(Directory):
             assert self._hw['sn'] == self._hw_sn
             assert self._hw['name'] == hw_show_name
 
-            self._hw['description'] = self._hw['description'] \
-                .replace('<br>', '').replace('∼', '～')
+            self._hw['description'] = html.unescape(self._hw['description']) \
+                .replace('<br>', '').replace('</br>', '') \
+                .replace('∼', '～').replace('•', '‧')
             if not hw_show_description_cannot_be_decoded_with_default_encoding:
                 assert self._hw['description'] == hw_show_description
 
