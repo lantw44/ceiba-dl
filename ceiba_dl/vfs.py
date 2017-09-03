@@ -2350,8 +2350,9 @@ class CourseShareDirectory(Directory):
             self.vfs.request.file(
                 share_list_path, share_list_html, args=share_list_args)
 
+            # 有些人的名字可能無法用普通的 big5 表示，所以改用 big5-hkscs
             share_list_page = etree.fromstring(
-                share_list_html.getvalue().decode('big5', errors='replace'),
+                share_list_html.getvalue().decode('big5-hkscs', errors='replace'),
                 etree.HTMLParser(remove_comments=True))
             share_list_tables = share_list_page.xpath(
                 '//div[@id="sect_cont"]//table[1]')
