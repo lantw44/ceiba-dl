@@ -2304,7 +2304,7 @@ class CourseShareDirectory(Directory):
              s['dir_course_share_perd'], [
                 (['姓名', 'Name'], AttrType.EMAIL),
                 (['分享類別', 'Type'], AttrType.TYPE,
-                    ['書籍介紹', 'Books Introduction']),
+                    ['文章介紹', 'Articles Introduction']),
                 (['文章名稱', 'Article Title'], AttrType.TITLE),
                 (['期刊名稱', 'Periodical Title'], AttrType.STRING,
                     s['attr_course_share_perd_periodical_title']),
