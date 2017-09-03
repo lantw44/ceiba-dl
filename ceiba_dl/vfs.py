@@ -109,7 +109,8 @@ def url_to_path_and_args(url, no_query_string=False):
         # 沒中文字的時候 CEIBA 用 %3F 代表問號（跳脫一次）
         # 有中文字的時候 CEIBA 用 %253F 代表問號（跳脫兩次）
         # 注意 ceiba_dl.Request 本身就會跳脫一次，所以這裡至多只會跳脫一次
-        if quote(path.replace('?', '')) != path.replace('?', ''):
+        quote_test = path.replace('?', '').replace(' ', '')
+        if quote(quote_test) != quote_test:
             path = path.replace('?', '%3F')
         args = {}
     else:
