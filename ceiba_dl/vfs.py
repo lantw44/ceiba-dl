@@ -8,6 +8,7 @@ from urllib.parse import urlencode, urlsplit, parse_qs, quote, unquote
 import ast
 import csv
 import json
+import html
 import logging
 
 # 提供給外部使用的 VFS 界面
@@ -125,7 +126,7 @@ def url_to_path_and_args(url, no_query_string=False):
 # lxml 遇到沒有文字時回傳 None，但空字串比較好操作
 
 def element_get_text(element):
-    return '' if element.text == None else element.text
+    return '' if element.text == None else html.unescape(element.text)
 
 # 從雙欄表格中取得資料的輔助工具
 
@@ -1185,7 +1186,6 @@ class CourseBoardsThreadDirectory(Directory):
         self._board = board
 
     def fetch(self):
-        from html import escape
         s = self.vfs.strings
 
         board_metadata = JSONFile(self.vfs, self)
@@ -1263,7 +1263,7 @@ class CourseBoardsThreadDirectory(Directory):
                     '<html>',
                     '  <head>',
                     '    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">',
-                    '    <title>{}</title>'.format(escape(post['subject'])),
+                    '    <title>{}</title>'.format(html.escape(post['subject'])),
                     '  </head>',
                     '  <body>',
                     '    <p>',
