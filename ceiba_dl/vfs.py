@@ -2351,8 +2351,59 @@ class CourseShareDirectory(Directory):
                 share_list_path, share_list_html, args=share_list_args)
 
             # 有些人的名字可能無法用普通的 big5 表示，所以改用 big5-hkscs
-            share_list_page = etree.fromstring(
-                share_list_html.getvalue().decode('big5-hkscs', errors='replace'),
+            share_list_source = share_list_html.getvalue() \
+                .decode('big5-hkscs', errors='replace')
+            share_list_source_backup = share_list_source
+
+            # 由於這個頁面上很多地方都沒有跳脫 < 和 >，導致有些重要的 a 標籤
+            # 連同編碼錯誤的文字一起被刪除，所以我們要想辦法先把它修好……
+            source_index = 0
+            while True:
+                source_index = share_list_source.find('<a href=', source_index)
+                if source_index < 0:
+                    break
+                # 首先往後找，確定在看到 > 之前不會遇到 <
+                not_a_tag = False
+                for c in share_list_source[source_index + 1:]:
+                    if c == '>':
+                        break
+                    elif c == '<':
+                        not_a_tag = True
+                        break
+                # 先遇到就代表這個大概不是 a 標籤，跳過
+                if not_a_tag:
+                    source_index += 8
+                    continue
+                # 接者往回找，如果先遇到 > 就正常，遇到 < 則刪除
+                reset_source_index = False
+                for c_index in reversed(range(source_index)):
+                    if share_list_source[c_index] == '>':
+                        break
+                    elif share_list_source[c_index] == '<':
+                        # 現在我們要刪除索引值是 c_index 的字元
+                        share_list_source = \
+                            share_list_source[:c_index] + \
+                            share_list_source[c_index + 1:]
+                        # 為了避免索引值錯亂，有任何修改就全部重找
+                        reset_source_index = True
+                        break
+                if reset_source_index:
+                    source_index = 0
+                else:
+                    source_index += 8
+
+            if share_list_source != share_list_source_backup:
+                self.vfs.logger.warning(
+                    '課程代號 {} 的資源分享頁面有未跳脫的 < 字元' \
+                    .format(self._course_sn))
+                self.vfs.logger.warning(
+                    '這很有可能導致 HTML 解析器發生錯誤而造成資料遺失')
+                self.vfs.logger.warning(
+                    '目前已經使用自動修改過的網頁原始碼以避免問題發生')
+                self.vfs.logger.warning(
+                    '但仍然建議應該自行連上 CEIBA 網頁檢查下載到的資料是否正確')
+
+            share_list_page = etree.fromstring(share_list_source,
                 etree.HTMLParser(remove_comments=True))
             share_list_tables = share_list_page.xpath(
                 '//div[@id="sect_cont"]//table[1]')
