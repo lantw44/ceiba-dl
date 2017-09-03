@@ -2389,9 +2389,11 @@ class CourseShareDirectory(Directory):
                 if len(share_list_row[0]) == 1:
                     assert not share_list_row[0].text
                     assert share_list_row[0][0].tag == 'a'
-                    share_name = element_get_text(share_list_row[0][0])
+                    share_name = element_get_text(share_list_row[0][0]) \
+                        .replace('∼', '～').replace('•', '‧')
                 elif len(share_list_row[0]) == 0:
-                    share_name = element_get_text(share_list_row[0])
+                    share_name = element_get_text(share_list_row[0]) \
+                        .replace('∼', '～').replace('•', '‧')
                 else:
                     assert False
 
