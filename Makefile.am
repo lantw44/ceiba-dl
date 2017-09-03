@@ -5,6 +5,7 @@ NULL =
 EXTRA_DIST = \
 	COPYING				\
 	COPYING.GPL			\
+	README.asciidoc			\
 	ceiba-dl.py			\
 	ceiba_dl/_version.py.in		\
 	$(NULL)
