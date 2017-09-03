@@ -1367,7 +1367,6 @@ class CourseHomeworksHomeworkDirectory(Directory):
             assert self._hw['sn'] == self._hw_sn
 
     def fetch(self):
-        import ast
         s = self.vfs.strings
         hw_keys = ['sn', 'name', 'description', 'file_path', 'url',
             'pub_date', 'pub_hour', 'end_date', 'end_hour', 'is_subm', 'hw_scores']
