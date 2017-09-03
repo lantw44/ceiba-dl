@@ -2482,7 +2482,18 @@ class CourseShareDirectory(Directory):
                         assert len(share_show_field) == 2
                         title = row_get_value(share_show_row,
                             field_name, {}, free_form=True)
-                        assert title == share_name
+
+                        # 如果不一樣，表示 CEIBA 又因為沒有跳脫特殊字元，
+                        # 導致資料出錯了
+                        if title != share_name:
+                            assert ''.join(etree.fromstring(
+                                title, etree.HTMLParser()).itertext()) == \
+                                share_name
+                            # 用正確的資料覆蓋掉前面的錯誤資料
+                            share_filename = format_filename(
+                                share_sn, title, 'json')
+                            share_file.replace(s['attr_course_share_name'],
+                                title, share_show_path)
 
                     elif field_type == AttrType.LINK:
                         assert len(share_show_field) == 3
@@ -3041,6 +3052,14 @@ class JSONFile(Regular):
         assert key in self._json
         assert isinstance(self._json[key], list)
         self._json[key].append(value)
+
+    def replace(self, key, value, source=None):
+        assert key in self._json
+        assert key in self._sources
+        self._json[key] = value
+        if source:
+            assert isinstance(source, str) or isinstance(source, list)
+            self._sources[key] = source
 
     def get(self, key):
         return self._json[key]
