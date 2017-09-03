@@ -713,8 +713,20 @@ class StudentsStudentDirectory(Directory):
         assert student_frequently_used_email_element[0].get('href')
         student_frequently_used_email = element_get_text(
             student_frequently_used_email_element[0])
-        assert student_frequently_used_email_element[0].get('href') == \
-            'mailto:' + student_frequently_used_email
+        student_frequently_used_email_from_href = \
+            student_frequently_used_email_element[0].get('href')
+
+        # CEIBA 不會跳脫 < 和 > 符號，如果使用者填寫的電子郵件地址包含這個符號
+        # 會使透過 .text 拿到的資料不正確
+        if student_frequently_used_email_from_href.find('<') >= 0 and \
+            student_frequently_used_email_from_href.find('>') >= 0:
+            assert student_frequently_used_email_from_href.startswith('mailto:')
+            student_frequently_used_email = \
+                student_frequently_used_email_from_href[7:]
+        else:
+            assert student_frequently_used_email_from_href == \
+                'mailto:' + student_frequently_used_email
+
         student_file.add(s['attr_students_frequently_used_email'],
             student_frequently_used_email, student_path)
 
@@ -733,7 +745,8 @@ class StudentsStudentDirectory(Directory):
         student_more_personal_information_element = row_get_value(student_rows[11],
             ['更多的個人資訊', 'More Personal Information'],
             {}, free_form=True, return_object=True)
-        assert len(student_more_personal_information_element) == 0
+
+        # 使用者可以自己在這個欄位塞各種標籤……
         student_more_personal_information = ''.join(
             student_more_personal_information_element.itertext())
         student_file.add(s['attr_students_more_personal_information'],
