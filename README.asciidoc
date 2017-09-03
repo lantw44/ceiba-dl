@@ -58,6 +58,9 @@ CEIBA 網頁做出來的。
 . 直接執行 `python3 ceiba-dl.py`，但注意這樣不會編譯登入輔助程式，
   可能會需要手動編譯，或在執行時手動輸入 cookie 值。
 
+如果是 Arch Linux 的使用者，可以直接從 AUR 安裝
+https://aur.archlinux.org/packages/ceiba-dl-git/[ceiba-dl-git] 套件。
+
 
 == 使用方式
 執行 `ceiba-dl --help` 可以看到程式的版本編號、支援的子指令和選項。
