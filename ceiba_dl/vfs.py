@@ -2397,14 +2397,16 @@ class CourseShareDirectory(Directory):
                     assert False
 
                 # 簡介
-                assert len(share_list_row[1]) == 1
-                assert share_list_row[1][0].tag == 'a'
-                assert share_list_row[1][0].get('href')
-                assert len(share_list_row[1][0]) == 1
-                assert share_list_row[1][0][0].tag == 'span'
-                assert share_list_row[1][0][0].get('class') == 'more'
-                assert share_list_row[1][0][0].text == 'more »'
-                path, args = url_to_path_and_args(share_list_row[1][0].get('href'))
+                share_list_more_element = share_list_row[1].xpath('.//a')
+                assert len(share_list_more_element) == 1
+                assert share_list_more_element[0].tag == 'a'
+                assert share_list_more_element[0].get('href')
+                assert len(share_list_more_element[0]) == 1
+                assert share_list_more_element[0][0].tag == 'span'
+                assert share_list_more_element[0][0].get('class') == 'more'
+                assert share_list_more_element[0][0].text == 'more »'
+                path, args = url_to_path_and_args(
+                    share_list_more_element[0].get('href'))
 
                 assert share_show_path.rsplit('/', maxsplit=1)[1] == path
                 share_sn = args['sn']
@@ -2499,8 +2501,9 @@ class CourseShareDirectory(Directory):
                         field_output = share_show_field[2]
                         element = row_get_value(share_show_row, field_name,
                             {}, free_form=True, return_object=True)
-                        assert list(map(lambda x: x.tag, element)) == \
-                            ['br'] * len(element)
+
+                        # 這裡不檢查是否只有使用到 br 標籤，因為 CEIBA 沒有跳脫
+                        # 特殊字元，使用者可以塞各種不認識的標籤進來……
                         string = ''.join(element.itertext())
                         if string.find('\r') >= 0 and string.find('\n') < 0:
                             string = string.replace('\r', '\n')
