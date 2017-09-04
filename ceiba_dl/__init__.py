@@ -1,6 +1,7 @@
 # License: LGPL3+
 
 from lxml import etree
+import errno
 import io
 import json
 import logging
@@ -275,10 +276,22 @@ class Get:
 
     def download_regular(self, path, node, retry, dcb, ecb):
         disk_path_object = pathlib.Path(path.lstrip('/'))
-        disk_path = str(disk_path_object)
 
         def ccb(*args):
             return dcb(path, *args)
+
+        def disk_path_object_open(mode):
+            while True:
+                try:
+                    nonlocal disk_path_object
+                    return disk_path_object.open(mode)
+                except IOError as err:
+                    if err.errno != errno.ENAMETOOLONG:
+                        raise err
+                    disk_path_object = disk_path_object.parent / \
+                        (disk_path_object.stem[:-1] + disk_path_object.suffix)
+                    self.logger.info('指定的檔案名稱太長，正在嘗試改用 {}' \
+                        .format(str(disk_path_object)))
 
         download_ok = False
         for i in range(retry):
@@ -289,13 +302,13 @@ class Get:
                 disk_file_opened = False
                 disk_file_read_opened = False
                 try:
-                    disk_file = disk_path_object.open('xb')
+                    disk_file = disk_path_object_open('xb')
                     disk_file_opened = True
                 except FileExistsError:
                     if disk_path_object.is_file() and \
                         disk_path_object.stat().st_size == node.size():
                         if node.local:
-                            disk_file_read = disk_path_object.open('rb')
+                            disk_file_read = disk_path_object_open('rb')
                             disk_file_read_opened = True
                             disk_file_content = disk_file_read.read()
                             disk_file_read.close()
@@ -305,19 +318,19 @@ class Get:
                             if disk_file_content == ceiba_file_content:
                                 self.logger.info(
                                     '跳過已經存在且內容相同的檔案 {}' \
-                                    .format(disk_path))
+                                    .format(str(disk_path_object)))
                                 download_ok = True
                                 break
                             else:
-                                disk_file = disk_path_object.open('wb')
+                                disk_file = disk_path_object_open('wb')
                                 disk_file_opened = True
                         else:
                             self.logger.info('跳過已經存在且大小相同的檔案 {}' \
-                                .format(disk_path))
+                                .format(str(disk_path_object)))
                             download_ok = True
                             break
                     else:
-                        disk_file = disk_path_object.open('wb')
+                        disk_file = disk_path_object_open('wb')
                         disk_file_opened = True
                 node.read(disk_file, progress_callback=ccb)
                 disk_file.close()
