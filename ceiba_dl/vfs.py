@@ -102,7 +102,7 @@ def format_filename(sn, title, extension):
 
 def url_to_path_and_args(url, no_query_string=False):
     if no_query_string:
-        url = url.replace('?', '%3F')
+        url = url.replace('?', '%3F').replace('#', '%23')
     components = urlsplit(url)
     path = components.path
     if no_query_string:
@@ -110,9 +110,9 @@ def url_to_path_and_args(url, no_query_string=False):
         # 沒中文字的時候 CEIBA 用 %3F 代表問號（跳脫一次）
         # 有中文字的時候 CEIBA 用 %253F 代表問號（跳脫兩次）
         # 注意 ceiba_dl.Request 本身就會跳脫一次，所以這裡至多只會跳脫一次
-        quote_test = path.replace('?', '').replace(' ', '')
+        quote_test = path.replace('?', '').replace('#', '').replace(' ', '')
         if quote(quote_test) != quote_test:
-            path = path.replace('?', '%3F')
+            path = path.replace('?', '%3F').replace('#', '%23')
         args = {}
     else:
         query_string = components.query
