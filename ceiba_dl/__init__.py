@@ -30,14 +30,6 @@ class NotJSONError(Error):
         self.message = '伺服器回傳非 JSON 格式資料：{}'.format(
             data.strip().replace('\r', '').replace('\n', ' '))
 
-class NotLoggedInError(Error):
-    def __init__(self, message='無法使用 NTU CEIBA API，請嘗試重新登入'):
-        self.message = message
-
-class NoSuchFunctionError(Error):
-    def __init__(self, message='NTU CEIBA API 回報無此功能可用，請檢查 mode 參數'):
-        self.message = message
-
 class NoneIO:
     def write(*x):
         pass
