@@ -51,9 +51,6 @@ class VFS:
     def is_internal_link(self, node):
         return isinstance(node, InternalLink)
 
-    def is_external_link(self, node):
-        return isinstance(node, ExternalLink)
-
     def _do_edit(self):
         s = self.strings
 
@@ -288,18 +285,6 @@ class InternalLink(File):
 
     def read_link(self):
         return self.path
-
-class ExternalLink(File):
-    def __init__(self, vfs, parent, url):
-        super().__init__(vfs, parent)
-        self.url = url
-        self.ready = True
-
-    def read(self, output, **kwargs):
-        output.write(self.url.encode() + b'\n')
-
-    def read_link(self):
-        return self.url
 
 # 其他衍生的檔案型別
 

@@ -202,7 +202,7 @@ class Get:
         if not node_ready:
             return False
 
-        if self.vfs.is_internal_link(node) or self.vfs.is_external_link(node):
+        if self.vfs.is_internal_link(node):
             return self.download_link(path, node, retry, dcb, ecb)
         elif self.vfs.is_regular(node):
             return self.download_regular(path, node, retry, dcb, ecb)
@@ -223,8 +223,6 @@ class Get:
         disk_path = str(disk_path_object)
         if self.vfs.is_internal_link(node):
             link_target_path = str(pathlib.PurePath(node.read_link()))
-        elif self.vfs.is_external_link(node):
-            link_target_path = node.read_link()
         else:
             assert False
 
@@ -382,8 +380,6 @@ class Ls:
         node = self.vfs.open(path)
         if self.vfs.is_internal_link(node):
             self.print_internal_link(output, path, node)
-        elif self.vfs.is_external_link(node):
-            self.print_external_link(output, path, node)
         elif self.vfs.is_regular(node):
             self.print_regular(output, path)
         elif self.vfs.is_directory(node):
@@ -401,12 +397,6 @@ class Ls:
     def print_internal_link(self, output, path, node):
         if self.details:
             output.write('連結       {} -> {}\n'.format(path, node.read_link()))
-        else:
-            output.write(path + '\n')
-
-    def print_external_link(self, output, path, node):
-        if self.details:
-            output.write('外部連結   {} -> {}\n'.format(path, node.read_link()))
         else:
             output.write(path + '\n')
 
