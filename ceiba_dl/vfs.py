@@ -180,7 +180,7 @@ def js_window_open_get_url(js_script):
 def ceiba_function_enabled(request, course_sn, function, path):
     frame_path = '/modules/index.php'
     frame_args = {'csn': course_sn, 'default_fun': function}
-    request.web(frame_path, args=frame_args)
+    request.web(frame_path, args=frame_args, allow_return_none=True)
     return len(request.web(path).xpath('//table')) > 0
 
 # 基本的檔案型別：普通檔案、目錄、內部連結、外部連結
@@ -608,7 +608,7 @@ class StudentsStudentDirectory(Directory):
         student_path = '/modules/student/stu_person.php'
         student_args = {'stu': self._account}
 
-        self.vfs.request.web(frame_path, args=frame_args)
+        self.vfs.request.web(frame_path, args=frame_args, allow_return_none=True)
         student_page = self.vfs.request.web(student_path, args=student_args)
         assert len(student_page.xpath('//table')) > 0
 
@@ -837,7 +837,8 @@ class CourseDirectory(Directory):
             return
 
         # CEIBA 規定要先呼叫過 semester 才能用 course
-        self.vfs.request.api({'mode': 'semester', 'semester': self._semester})
+        self.vfs.request.api({'mode': 'semester', 'semester': self._semester},
+            allow_return_none=True)
         # 一定要傳 class_no 才能拿到完整的課程內容
         result = self.vfs.request.api(
             {'mode': 'course',
@@ -957,7 +958,7 @@ class WebCourseDirectory(Directory):
 
         info_path = '/modules/info/info.php'
 
-        self.vfs.request.web(frame_path, args=frame_args)
+        self.vfs.request.web(frame_path, args=frame_args, allow_return_none=True)
         info_page = self.vfs.request.web(info_path)
         info_basic_rows = info_page.xpath('//div[@id="sect_cont"]/table[1]/tr')
 
@@ -1146,7 +1147,8 @@ class CourseBoardsDirectory(Directory):
 
     def fetch(self):
         # CEIBA 規定要先呼叫過 semester 才能用 read_board
-        self.vfs.request.api({'mode': 'semester', 'semester': self._semester})
+        self.vfs.request.api({'mode': 'semester', 'semester': self._semester},
+            allow_return_none=True)
         result = self.vfs.request.api(
             {'mode': 'read_board',
              'semester': self._semester,
@@ -1182,7 +1184,8 @@ class CourseBoardsThreadDirectory(Directory):
         self.add(s['file_course_boards_metadata'], board_metadata)
 
         # CEIBA 規定要先呼叫過 semester 才能用 read_board_post
-        self.vfs.request.api({'mode': 'semester', 'semester': self._semester})
+        self.vfs.request.api({'mode': 'semester', 'semester': self._semester},
+            allow_return_none=True)
         result = self.vfs.request.api(
             {'mode': 'read_board_post',
              'semester': self._semester,
@@ -1310,7 +1313,8 @@ class CourseHomeworksDirectory(Directory):
 
             hw_list_path = '/modules/hw/hw.php'
 
-            self.vfs.request.web(frame_path, args=frame_args)
+            self.vfs.request.web(frame_path, args=frame_args,
+                allow_return_none=True)
             hw_list_page = self.vfs.request.web(hw_list_path)
 
             assert len(hw_list_page.xpath('//table')) > 0
@@ -1378,8 +1382,8 @@ class CourseHomeworksHomeworkDirectory(Directory):
         hw_view_args = {'hw_sn': self._hw_sn, 'all': '1'}
 
         # 按照順序爬網頁
-        self.vfs.request.web(frame_path, args=frame_args)
-        self.vfs.request.web(hw_list_path)
+        self.vfs.request.web(frame_path, args=frame_args, allow_return_none=True)
+        self.vfs.request.web(hw_list_path, allow_return_none=True)
         hw_show_page = self.vfs.request.web(hw_show_path, args=hw_show_args)
         hw_eval_page = self.vfs.request.web(hw_eval_path, args=hw_eval_args)
         hw_view_page = self.vfs.request.web(hw_view_path, args=hw_view_args)
@@ -1868,7 +1872,7 @@ class CourseGradesDirectory(Directory):
         grade_args = {}
 
         # 重複爬網頁直到頁面中沒有隱藏項目為止
-        self.vfs.request.web(frame_path, args=frame_args)
+        self.vfs.request.web(frame_path, args=frame_args, allow_return_none=True)
         while True:
             grade_page = self.vfs.request.web(grade_path, args=grade_args)
             grade_page_has_hidden_rows = False
@@ -2225,7 +2229,7 @@ class CourseShareDirectory(Directory):
         frame_path = '/modules/index.php'
         frame_args = {'csn': self._course_sn, 'default_fun': 'share'}
 
-        self.vfs.request.web(frame_path, args=frame_args)
+        self.vfs.request.web(frame_path, args=frame_args, allow_return_none=True)
 
         class AttrType(Enum):
             EMAIL = 1
@@ -2702,7 +2706,7 @@ class CourseVoteDirectory(Directory):
 
         vote_list_path = '/modules/vote/vote.php'
 
-        self.vfs.request.web(frame_path, args=frame_args)
+        self.vfs.request.web(frame_path, args=frame_args, allow_return_none=True)
         vote_list_page = self.vfs.request.web(vote_list_path)
 
         vote_list_rows_all = vote_list_page.xpath('//div[@id="sect_cont"]/table/tr')

@@ -48,6 +48,8 @@ class Request:
         self.api_url = api_url
         self.file_url = file_url
         self.web_url = web_url
+        self.api_cache = None
+        self.web_cache = dict()
         if not cipher:
             tls_backend = pycurl.version_info()[5].split('/')[0]
             if tls_backend == 'OpenSSL':
@@ -65,8 +67,14 @@ class Request:
         self.curl.setopt(pycurl.DEFAULT_PROTOCOL, 'https')
         self.curl.setopt(pycurl.FOLLOWLOCATION, False)
 
-    def api(self, args, encoding='utf-8'):
+    def api(self, args, encoding='utf-8', allow_return_none=False):
         self.logger.debug('準備送出 API 請求')
+        if args.get('mode', '') == 'semester':
+            semester = args.get('semester', '')
+            if allow_return_none and self.api_cache == semester:
+                self.logger.debug('忽略重複的 {} 學期 API 請求'.format(semester))
+                return
+            self.api_cache = semester
         query_args = dict()
         query_args.update(self.api_args)
         query_args.update(args)
@@ -92,6 +100,7 @@ class Request:
 
     def file(self, path, output, args={}, progress_callback=lambda *x: None):
         self.logger.debug('準備送出檔案下載請求')
+        self.web_cache[path] = dict(args)
         url = urllib.parse.urljoin(self.file_url, urllib.parse.quote(path))
         if len(args) > 0:
             url += '?' + urllib.parse.urlencode(args)
@@ -110,6 +119,7 @@ class Request:
 
     def file_size(self, path, args={}):
         self.logger.debug('準備送出檔案大小查詢請求')
+        self.web_cache[path] = dict(args)
         url = urllib.parse.urljoin(self.file_url, urllib.parse.quote(path))
         if len(args) > 0:
             url += '?' + urllib.parse.urlencode(args)
@@ -127,8 +137,14 @@ class Request:
             raise ServerError(status)
         return self.curl.getinfo(pycurl.CONTENT_LENGTH_DOWNLOAD)
 
-    def web(self, path, args={}, encoding=None):
+    def web(self, path, args={}, encoding=None, allow_return_none=False):
         self.logger.debug('準備送出網頁請求')
+        if allow_return_none:
+            if path in self.web_cache and self.web_cache[path] == args:
+                self.logger.debug('忽略重複的 {} 網頁請求'.format(path))
+                self.logger.debug('參數：{}'.format(args))
+                return
+        self.web_cache[path] = dict(args)
         url = urllib.parse.urljoin(self.web_url, urllib.parse.quote(path))
         if len(args) > 0:
             url += '?' + urllib.parse.urlencode(args)
@@ -151,6 +167,7 @@ class Request:
 
     def web_redirect(self, path, args={}):
         self.logger.debug('準備測試網頁重導向目的地')
+        self.web_cache[path] = dict(args)
         url = urllib.parse.urljoin(self.web_url, urllib.parse.quote(path))
         if len(args) > 0:
             url += '?' + urllib.parse.urlencode(args)
