@@ -3078,7 +3078,13 @@ class CourseRosterDirectory(Directory):
 
             student_file.finish()
             student_filename = '{}.json'.format(student_id)
-            self.add(student_filename, student_file)
+
+            # 名單上可能有重複的學號
+            try:
+                self.add(student_filename, student_file)
+            except FileExistsError:
+                pass
+
             collected_accounts[student_id] = None
 
         for account in collected_accounts.keys():
