@@ -15,6 +15,7 @@ class Config:
         'web_cookies': { },
         'edit': {
             'add_courses': [ ],
+            'add_unenrolled_courses': [ ],
             'delete_files': [ ]
          },
         'strings': {
@@ -354,7 +355,7 @@ class Config:
     @property
     def edit(self):
         edit = dict(self._config['edit'])
-        for key in ['add_courses', 'delete_files']:
+        for key in ['add_courses', 'add_unenrolled_courses', 'delete_files']:
             edit[key] = ast.literal_eval(edit[key])
         return edit
 

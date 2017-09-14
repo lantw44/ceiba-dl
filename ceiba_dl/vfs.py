@@ -64,6 +64,16 @@ class VFS:
             node.add(course.name, course)
             node.add(sn, InternalLink(self, node, course.name))
 
+        # add_unenrolled_courses
+        for semester, sn in self._edit['add_unenrolled_courses']:
+            path = PurePosixPath('/', s['dir_root_courses'], semester)
+            node = self.open(path, edit_check=False)
+            course = UnenrolledCourseDirectory(self, node, sn)
+            course.fetch()
+            assert course.ready == True
+            node.add(course.name, course)
+            node.add(sn, InternalLink(self, node, course.name))
+
         # delete_files
         for path in self._edit['delete_files']:
             node = self.open(path, edit_check=False, allow_students=False)
@@ -315,6 +325,16 @@ class RootDirectory(Directory):
 class RootCoursesDirectory(Directory):
     def __init__(self, vfs, parent):
         super().__init__(vfs, parent)
+
+    def access(self, name):
+        if not self.ready:
+            self.fetch()
+        if name not in ['.', '..'] and \
+            name not in map(lambda x: x[0], self._children):
+                new_directory = Directory(self.vfs, self)
+                new_directory.ready = True
+                self.add(name, new_directory)
+        return super().access(name)
 
     def fetch(self):
         s = self.vfs.strings
@@ -929,7 +949,7 @@ class CourseDirectory(Directory):
 
         # 修課學生
         self.add(s['dir_course_students'], CourseRosterDirectory(
-            self.vfs, self, self._sn))
+            self.vfs, self, self._sn, self._name))
 
         # 課程助教
         course_list_row = self.vfs.root.courses.search_course_list(self._sn)
@@ -1034,7 +1054,7 @@ class WebCourseDirectory(Directory):
 
         # 修課學生
         self.add(s['dir_course_students'], CourseRosterDirectory(
-            self.vfs, self, self._sn))
+            self.vfs, self, self._sn, self._name))
 
         # 課程助教
         course_list_row = self.vfs.root.courses.search_course_list(self._sn)
@@ -1047,6 +1067,23 @@ class WebCourseDirectory(Directory):
             self.add(s['dir_course_web_assistants'],
                 CourseAssistantsDirectory(self.vfs, self, course_list_row[7]))
 
+        self.ready = True
+
+    @property
+    def name(self):
+        return self._name
+
+class UnenrolledCourseDirectory(Directory):
+    def __init__(self, vfs, parent, sn):
+        super().__init__(vfs, parent)
+        self._sn = sn
+
+    def fetch(self):
+        s = self.vfs.strings
+        roster_directory = CourseRosterDirectory(self.vfs, self, self._sn)
+        roster_directory.fetch()
+        self._name = roster_directory.course_name
+        self.add(s['dir_course_students'], roster_directory)
         self.ready = True
 
     @property
@@ -2978,9 +3015,10 @@ class CourseTeacherInfoDirectory(Directory):
         self.ready = True
 
 class CourseRosterDirectory(Directory):
-    def __init__(self, vfs, parent, course_sn):
+    def __init__(self, vfs, parent, course_sn, course_name=None):
         super().__init__(vfs, parent)
         self._course_sn = course_sn
+        self._expected_course_name = course_name
 
     def fetch(self):
         s = self.vfs.strings
@@ -2990,6 +3028,19 @@ class CourseRosterDirectory(Directory):
         roster_args = {'course_sn': self._course_sn,
             'sort': 'student', 'current_lang': 'chinese'}
         roster_page = self.vfs.request.web(roster_path, args=roster_args)
+
+        roster_title_element = roster_page.xpath('/html/body/h1')[0]
+        assert len(roster_title_element) == 0
+        roster_title = element_get_text(roster_title_element)
+        if roster_title.endswith(' 修課學生'):
+            self._course_name = roster_title[:-5]
+        elif roster_title.endswith(' Roster'):
+            self._course_name = roster_title[:-7]
+        else:
+            assert False
+        if self._expected_course_name != None:
+            assert self._course_name == self._expected_course_name
+        del self._expected_course_name
 
         roster_rows_all = roster_page.xpath('//table/tr')
         roster_rows = roster_rows_all[1:]
@@ -3036,6 +3087,10 @@ class CourseRosterDirectory(Directory):
                     account, sn=self._course_sn, pwd=self)))
 
         self.ready = True
+
+    @property
+    def course_name(self):
+        return self._course_name
 
 class CourseAssistantsDirectory(Directory):
     def __init__(self, vfs, parent, cell):
