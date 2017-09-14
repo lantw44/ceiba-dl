@@ -447,10 +447,13 @@ class RootStudentsDirectory(Directory):
                 s['dir_root_students'], account).as_posix()
 
     def queue_deletion_request(self, path):
-        assert not hasattr(self, '_last_sn')
-        if not hasattr(self, '_queued_deletion_requests'):
-            self._queued_deletion_requests = OrderedDict()
-        self._queued_deletion_requests[path] = None
+        if not hasattr(self, '_last_sn'):
+            if not hasattr(self, '_queued_deletion_requests'):
+                self._queued_deletion_requests = OrderedDict()
+            self._queued_deletion_requests[path] = None
+        else:
+            node = self.vfs.open(path, edit_check=False)
+            node.parent.unlink(PurePosixPath(path).name)
 
     @property
     def last_sn(self):
