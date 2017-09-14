@@ -2930,7 +2930,7 @@ class CourseTeacherInfoDirectory(Directory):
             'cname', 'ename', 'email', 'phone', 'address']
         collected_accounts = OrderedDict()
 
-        for teacher in self._teacher_info:
+        for index, teacher in enumerate(self._teacher_info):
             assert set(teacher.keys()) == set(teacher_info_keys)
             assert teacher['account']
             teacher_file = JSONFile(self.vfs, self)
@@ -2959,7 +2959,7 @@ class CourseTeacherInfoDirectory(Directory):
                 teacher['address'], 'address')
 
             teacher_file.finish()
-            teacher_filename = '{}.json'.format(teacher['account'])
+            teacher_filename = '{:02} {}.json'.format(index + 1, teacher['cname'])
             self.add(teacher_filename, teacher_file)
             collected_accounts[teacher['account']] = None
 
