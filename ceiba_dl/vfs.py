@@ -706,8 +706,17 @@ class StudentsStudentDirectory(Directory):
         assert student_email_address_element[0].tag == 'a'
         assert student_email_address_element[0].get('href')
         student_email_address = element_get_text(student_email_address_element[0])
-        assert student_email_address_element[0].get('href') == \
-            'mailto:' + student_email_address
+        if len(student_email_address_element[0]) == 0:
+            assert student_email_address_element[0].get('href') == \
+                'mailto:' + student_email_address
+        else:
+            self.vfs.logger.warning('學號 {} 的個人頁面電子郵件欄位有多餘的標籤' \
+                .format(self._account))
+            self.vfs.logger.warning('這很有可能是 CEIBA 沒有跳脫特殊字元所造成')
+            assert student_email_address_element[0].get('href').startswith('mailto:')
+            assert student_email_address_element[0].get('href').find('<') >= 7
+            assert student_email_address_element[0].get('href').find('>') >= 7
+            student_email_address = student_email_address_element[0].get('href')[7:]
         student_file.add(s['attr_students_email_address'],
             student_email_address, student_path)
 
