@@ -710,8 +710,9 @@ class StudentsStudentDirectory(Directory):
         assert student_email_address_element[0].get('href')
         student_email_address = element_get_text(student_email_address_element[0])
         if len(student_email_address_element[0]) == 0:
-            assert student_email_address_element[0].get('href') == \
-                'mailto:' + student_email_address
+            if student_email_address.find('"') < 0:
+                assert student_email_address_element[0].get('href') == \
+                    'mailto:' + student_email_address
         else:
             self.vfs.logger.warning('學號 {} 的個人頁面電子郵件欄位有多餘的標籤' \
                 .format(self._account))
