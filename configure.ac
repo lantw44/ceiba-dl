@@ -1,7 +1,7 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-AC_INIT([ceiba-dl], [0.3], [https://github.com/lantw44/ceiba-dl/issues])
+AC_INIT([ceiba-dl], [0.4], [https://github.com/lantw44/ceiba-dl/issues])
 AC_CONFIG_SRCDIR([ceiba_dl/__init__.py])
 AC_CONFIG_HEADERS([config.h])
 
