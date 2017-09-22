@@ -1169,10 +1169,28 @@ class CourseContentsDirectory(Directory):
             content_node.add(s['attr_course_contents_files'], list(), 'file_name')
             all_contents[content['syl_sn']] = content_node
 
+        # CEIBA API 回傳的資料中，有時會包含一個檔案參照到不存在的 syl_sn
+        # 目前發現的案例是，有兩個 content_file 具有相同的檔名，其中一個參照到
+        # 正確的 syl_sn ，而另外一個的 syl_sn 不存在。這種情況可能是老師移動過
+        # 檔案位置，而 CEIBA API 的資料未正確更新。這種情況直接跳過。如果是其他
+        # 情況，則回報 warning 。
+        existing_files = set()
+        possible_missing_files = set()
+
         for content_file in self._content_files:
             assert set(content_file.keys()) == set(content_file_keys)
+            content_file_name = content_file['file_name']
+            if content_file['syl_sn'] not in all_contents:
+                possible_missing_files.add(content_file_name)
+                continue
             all_contents[content_file['syl_sn']].append(
-                s['attr_course_contents_files'], content_file['file_name'])
+                s['attr_course_contents_files'], content_file_name)
+            existing_files.add(content_file_name)
+
+        missing_files = possible_missing_files - existing_files
+        for file_name in missing_files:
+            self.vfs.logger.warning(
+                '找不到「{}」對應的課程大綱項目'.format(file_name))
 
         for sn, content_node in all_contents.items():
             content_filename = format_filename(sn,
