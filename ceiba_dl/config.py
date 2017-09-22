@@ -197,6 +197,7 @@ class Config:
             'attr_course_teachers_tr_msid': '教師類別',
             'value_course_teachers_tr_msid_0': '主要授課教師',
             'value_course_teachers_tr_msid_1': '其他授課教師',
+            'value_course_teachers_tr_msid_2': '其他授課教師',
             'attr_course_teachers_cname': '中文姓名',
             'attr_course_teachers_ename': '英文姓名',
             'attr_course_teachers_email': '電子郵件',

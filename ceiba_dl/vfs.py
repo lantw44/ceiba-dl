@@ -2997,6 +2997,9 @@ class CourseTeacherInfoDirectory(Directory):
             elif teacher['tr_msid'] == '1':
                 teacher_file.add(s['attr_course_teachers_tr_msid'],
                     s['value_course_teachers_tr_msid_1'], 'tr_msid')
+            elif teacher['tr_msid'] == '2':
+                teacher_file.add(s['attr_course_teachers_tr_msid'],
+                    s['value_course_teachers_tr_msid_2'], 'tr_msid')
             else:
                 assert False
 
