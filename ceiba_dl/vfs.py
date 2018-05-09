@@ -1612,6 +1612,7 @@ class CourseHomeworksHomeworkDirectory(Directory):
             self._hw['description'] = html.unescape(self._hw['description']) \
                 .replace('<br>', '').replace('</br>', '') \
                 .replace('∼', '～').replace('•', '‧')
+            hw_show_description = hw_show_description.replace('∼', '～')
             if not hw_show_description_cannot_be_decoded_with_default_encoding:
                 assert self._hw['description'] == hw_show_description
 
@@ -2410,9 +2411,8 @@ class CourseShareDirectory(Directory):
             self.vfs.request.file(
                 share_list_path, share_list_html, args=share_list_args)
 
-            # 有些人的名字可能無法用普通的 big5 表示，所以改用 big5-hkscs
             share_list_source = share_list_html.getvalue() \
-                .decode('big5-hkscs', errors='replace')
+                .decode('utf-8', errors='replace')
             share_list_source_backup = share_list_source
 
             # 由於這個頁面上很多地方都沒有跳脫 < 和 >，導致有些重要的 a 標籤
