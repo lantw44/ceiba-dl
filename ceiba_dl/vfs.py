@@ -1469,12 +1469,6 @@ class CourseHomeworksHomeworkDirectory(Directory):
             assert hour.isnumeric()
             return date + ' ' + hour
 
-        def use_unicode_private_areas(s):
-            for c in s:
-                if ord(c) >= 0xe000 and ord(c) <= 0xf8ff:
-                    return True
-            return False
-
         hw_show_rows = hw_show_page.xpath('//div[@id="sect_cont"]/table/tr')
         assert len(hw_show_rows) >= 9
 
@@ -1489,27 +1483,6 @@ class CourseHomeworksHomeworkDirectory(Directory):
             ['br'] * len(hw_show_description_element)
         hw_show_description = ''.join(hw_show_description_element.itertext()) \
             .rstrip('\xa0')
-
-        hw_show_description_cannot_be_decoded_with_default_encoding = \
-            use_unicode_private_areas(hw_show_description)
-        if hw_show_description_cannot_be_decoded_with_default_encoding:
-            self.vfs.logger.warning(
-                '作業 {} 的說明文字中有 Unicode 私人使用區的字元' \
-                .format(hw_show_name))
-            self.vfs.logger.warning(
-                '這很可能是因為預設編碼無法解讀日文所造成的錯誤')
-            self.vfs.logger.warning(
-                '準備使用 big5-hkscs 編碼重新讀取網頁')
-            hw_show_page = self.vfs.request.web(
-                hw_show_path, args=hw_show_args, encoding='big5-hkscs')
-            hw_show_rows = hw_show_page.xpath(
-                '//div[@id="sect_cont"]/table/tr')
-            hw_show_description_element = row_get_value(hw_show_rows[1],
-                ['作業說明', 'Description'], {},
-                free_form=True, return_object=True)
-            hw_show_description = ''.join(
-                hw_show_description_element.itertext()).rstrip('\xa0')
-            assert not use_unicode_private_areas(hw_show_description)
 
         # 2
         hw_show_download_file_path_element = row_get_value(hw_show_rows[2],
@@ -1613,8 +1586,7 @@ class CourseHomeworksHomeworkDirectory(Directory):
                 .replace('<br>', '').replace('</br>', '') \
                 .replace('∼', '～').replace('•', '‧')
             hw_show_description = hw_show_description.replace('∼', '～')
-            if not hw_show_description_cannot_be_decoded_with_default_encoding:
-                assert self._hw['description'] == hw_show_description
+            assert self._hw['description'] == hw_show_description
 
             assert self._hw['file_path'] == hw_show_download_file_path
             assert self._hw['url'] == hw_show_url
@@ -1655,13 +1627,9 @@ class CourseHomeworksHomeworkDirectory(Directory):
                 hw_show_name, hw_show_path)
 
         # description
-        if self._hw and \
-            not hw_show_description_cannot_be_decoded_with_default_encoding:
+        if self._hw:
             hw_node.add(s['attr_course_homeworks_homework_description'],
                 self._hw['description'], 'description')
-        else:
-            hw_node.add(s['attr_course_homeworks_homework_description'],
-                hw_show_description, hw_show_path)
 
         # download_file_path
         if self._hw:
