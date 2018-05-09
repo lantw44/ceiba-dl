@@ -53,11 +53,11 @@ class Request:
         if not cipher:
             tls_backend = pycurl.version_info()[5].split('/')[0]
             if tls_backend == 'OpenSSL':
-                cipher = 'AES128-SHA'
+                cipher = 'ECDHE-RSA-AES128-GCM-SHA256'
             elif tls_backend == 'GnuTLS':
-                cipher = 'AES128-SHA'
+                cipher = 'ECDHE-RSA-AES128-GCM-SHA256'
             elif tls_backend == 'NSS':
-                cipher = 'rsa_aes_128_sha'
+                cipher = 'ecdhe_rsa_aes_128_gcm_sha_256'
             else:
                 assert False, 'TLS 實作 {} 尚未支援'.format(tls_backend)
         self.curl.setopt(pycurl.USE_SSL, pycurl.USESSL_ALL)
