@@ -40,7 +40,7 @@ if test "$enable_helper_webkitgtk" = "yes"; then
             WARN_CFLAGS="$WARN_CFLAGS -Wno-declaration-after-statement"
             ;;
     esac
-    PKG_CHECK_MODULES([WEBKITGTK], [webkit2gtk-4.0], [],
+    PKG_CHECK_MODULES([WEBKITGTK], [webkit2gtk-4.0 >= 2.20], [],
         [AC_MSG_ERROR([
 
    WebKitGTK+ library cannot be found (Filename: webkit2gtk-4.0.pc)

@@ -39,8 +39,6 @@
 #include <libsoup/soup.h>
 #include <webkit2/webkit2.h>
 
-#include <JavaScriptCore/JavaScript.h>
-
 enum exit_status {
     EXIT_STATUS_PIPE_ERROR = 1,
     EXIT_STATUS_FORK_ERROR,
@@ -54,7 +52,6 @@ enum exit_status {
 
 typedef struct helper_data {
     WebKitWebView *web_view;
-    SoupCookieJar *cookie_jar;
     char *login_uri;
     char *expected_uri;
     char *cookie_name;
@@ -67,7 +64,6 @@ typedef struct helper_data {
 
 static void helper_data_init (HelperData *data) {
     data->web_view = NULL;
-    data->cookie_jar = NULL;
     data->login_uri = NULL;
     data->expected_uri = NULL;
     data->cookie_name = NULL;
@@ -80,7 +76,6 @@ static void helper_data_init (HelperData *data) {
 
 static void helper_data_fini (HelperData *data) {
     g_clear_object (&(data->web_view));
-    g_clear_object (&(data->cookie_jar));
     g_clear_pointer (&(data->login_uri), g_free);
     g_clear_pointer (&(data->expected_uri), g_free);
     g_clear_pointer (&(data->cookie_name), g_free);
@@ -90,84 +85,45 @@ static void helper_data_fini (HelperData *data) {
 
 static inline void stdin_input_enable (HelperData *helper_data);
 
-static void cookie_jar_print_http_only_cookie (SoupCookieJar *cookie_jar,
-    const char *cookie_name, const char *uri_str, FILE *output_fp) {
-
-    SoupURI *uri = soup_uri_new (uri_str);
-    g_return_if_fail (uri != NULL);
-    bool found = false;
-    GSList *cookies = soup_cookie_jar_get_cookie_list (cookie_jar, uri, TRUE);
-    for (GSList *l = cookies; l != NULL; l = l->next) {
-        SoupCookie *cookie = l->data;
-        if (strcmp (soup_cookie_get_name (cookie), cookie_name) == 0) {
-            if (soup_cookie_get_http_only (cookie)) {
-                fputs (soup_cookie_get_value (cookie), output_fp);
-                fputc ('\n', output_fp);
-                found = true;
-                break;
-            } else {
-                g_warning ("Javascript 找不到名稱是 %s 的 cookie，"
-                    "但它並沒有 HttpOnly 屬性", cookie_name);
-            }
-        }
-    }
-    g_slist_free (cookies);
-    soup_uri_free (uri);
-
-    if (!found) {
-        fputc ('\n', output_fp);
-    }
+static void cookie_free (void *cookie) {
+    soup_cookie_free (cookie);
 }
 
-static void javascript_cookie_ready_cb (GObject *web_view_object,
+static void cookies_ready_cb (GObject *cookie_manager_object,
     GAsyncResult *async_result, void *user_data) {
 
     HelperData *helper_data = user_data;
-    g_return_if_fail (helper_data->web_view == WEBKIT_WEB_VIEW (web_view_object));
-
     GError *err = NULL;
-    WebKitJavascriptResult *js_result = webkit_web_view_run_javascript_finish (
-        helper_data->web_view, async_result, &err);
 
-    if (js_result == NULL) {
-        g_warning ("Javascript 執行失敗：%s", err->message);
+    GList *cookies = webkit_cookie_manager_get_cookies_finish (
+        WEBKIT_COOKIE_MANAGER (cookie_manager_object), async_result, &err);
+    if (err != NULL) {
+        g_warning ("無法取得 cookie：%s", err->message);
         g_error_free (err);
         fputc ('\n', helper_data->output_fp);
-        goto reenable_stdin_watcher;
+        goto free_cookies;
     }
 
-    JSGlobalContextRef js_context = webkit_javascript_result_get_global_context (js_result);
-    JSValueRef js_value = webkit_javascript_result_get_value (js_result);
-    if (JSValueIsNull (js_context, js_value)) {
-        cookie_jar_print_http_only_cookie (
-            helper_data->cookie_jar,
-            helper_data->cookie_name,
-            webkit_web_view_get_uri (helper_data->web_view),
-            helper_data->output_fp);
-        goto unref_js_result;
-    }
-    if (!JSValueIsString (js_context, js_value)) {
-        g_warning ("Javascript 執行回傳值不是 null 也不是字串");
-        goto unref_js_result;
+    bool found = false;
+    for (GList *l = cookies; l != NULL; l = l->next) {
+        SoupCookie *cookie = l->data;
+        if (strcmp (soup_cookie_get_name (cookie), helper_data->cookie_name) == 0) {
+            fputs (soup_cookie_get_value (cookie), helper_data->output_fp);
+            fputc ('\n', helper_data->output_fp);
+            found = true;
+            break;
+        }
     }
 
-    JSStringRef js_str = JSValueToStringCopy(js_context, js_value, NULL);
-    size_t str_result_length = JSStringGetMaximumUTF8CStringSize (js_str);
-    char *str_result = g_malloc (str_result_length);
-    JSStringGetUTF8CString (js_str, str_result, str_result_length);
-    JSStringRelease (js_str);
+    if (!found) {
+        fputc ('\n', helper_data->output_fp);
+    }
 
-    char *str_result_escaped = g_strescape (str_result, NULL);
-    fputs (str_result_escaped, helper_data->output_fp);
-    fputc ('\n', helper_data->output_fp);
+free_cookies:
+    if (cookies != NULL) {
+        g_list_free_full (cookies, cookie_free);
+    }
 
-    g_free (str_result_escaped);
-    g_free (str_result);
-
-unref_js_result:
-    webkit_javascript_result_unref (js_result);
-
-reenable_stdin_watcher:
     g_clear_pointer (&(helper_data->cookie_name), g_free);
     stdin_input_enable (helper_data);
 }
@@ -217,28 +173,10 @@ static gboolean stdin_ready_cb (GIOChannel *stdin_channel,
     g_return_val_if_fail (helper_data->cookie_name == NULL, FALSE);
 
     if (stdin_read (stdin_channel, &helper_data->cookie_name, true)) {
-        // 讀取 cookie 使用的 JavaScript 程式碼來自：
-        // https://developer.mozilla.org/en-US/docs/Web/API/Document/cookie
-        g_debug ("使用者要求讀取 cookie - 名稱：%s", helper_data->cookie_name);
-        char *cookie_escaped = g_uri_escape_string (helper_data->cookie_name, NULL, TRUE);
-        char *js_code = g_strdup_printf (
-            "(function (key) {"
-            "    var re_test = new RegExp (\"(?:^|;\\\\s*)\" +"
-            "        key.replace(/[\\-\\.\\+\\*]/g, \"\\\\$&\") +"
-            "        \"\\\\s*\\\\=\");"
-            "    var re_get = new RegExp (\"(?:(?:^|.*;)\\\\s*\" +"
-            "        key.replace(/[\\-\\.\\+\\*]/g, \"\\\\$&\") +"
-            "        \"\\\\s*\\\\=\\\\s*([^;]*).*$)|^.*$\");"
-            "    if (re_test.test (document.cookie)) {"
-            "        return document.cookie.replace (re_get, \"$1\");"
-            "    } else {"
-            "        return null;"
-            "    }"
-            "})('%s');", cookie_escaped);
-        webkit_web_view_run_javascript (helper_data->web_view,
-            js_code, NULL, javascript_cookie_ready_cb, helper_data);
-        g_free (cookie_escaped);
-        g_free (js_code);
+        webkit_cookie_manager_get_cookies (
+            webkit_web_context_get_cookie_manager (
+                webkit_web_view_get_context (helper_data->web_view)),
+            helper_data->expected_uri, NULL, cookies_ready_cb, helper_data);
     } else {
         g_debug ("偵測到空白行或檔案結尾，準備結束");
         gtk_main_quit ();
@@ -330,105 +268,6 @@ static gboolean web_view_load_failed_cb (WebKitWebView *web_view,
     return FALSE;
 }
 
-static void cookie_jar_add_cookies_from_set_cookie_headers (
-    SoupCookieJar *cookie_jar, SoupMessageHeaders *hdrs,
-    const char *uri_str, const char *first_party_uri_str) {
-
-    SoupMessage *msg = soup_message_new ("GET", uri_str);
-    g_return_if_fail (msg != NULL);
-    soup_message_headers_clear (msg->response_headers);
-
-    SoupMessageHeadersIter iter;
-    const char *name, *value;
-    soup_message_headers_iter_init (&iter, hdrs);
-    while (soup_message_headers_iter_next (&iter, &name, &value)) {
-        soup_message_headers_append (msg->response_headers, name, value);
-    }
-
-    GSList *cookies = soup_cookies_from_response (msg);
-    if (first_party_uri_str == NULL) {
-        // Always accept cookies from the main resource
-        for (GSList *l = cookies; l != NULL; l = l->next) {
-            SoupCookie *cookie = l->data;
-            soup_cookie_jar_add_cookie (cookie_jar, cookie);
-        }
-    } else {
-        SoupURI *fp_uri = soup_uri_new (first_party_uri_str);
-        g_return_if_fail (fp_uri != NULL);
-        for (GSList *l = cookies; l != NULL; l = l->next) {
-            SoupCookie *cookie = l->data;
-            soup_cookie_jar_add_cookie_with_first_party (cookie_jar, fp_uri, cookie);
-        }
-        soup_uri_free (fp_uri);
-    }
-
-    g_slist_free (cookies);
-    g_object_unref (msg);
-}
-
-static const char *web_resource_get_first_party_uri (WebKitWebResource *resource) {
-    GObject *resource_object = G_OBJECT (resource);
-    if (GPOINTER_TO_INT (g_object_get_data (resource_object, "is-main-resource"))) {
-        return NULL;
-    }
-    return g_object_get_data (resource_object, "first-party-uri");
-}
-
-static void web_resource_sent_request_cb (WebKitWebResource *resource,
-    WebKitURIRequest *request, WebKitURIResponse *redirected_response, void *user_data) {
-
-    if (redirected_response == NULL) {
-        return;
-    }
-    g_return_if_fail (
-        webkit_uri_response_get_http_headers (redirected_response) != NULL);
-
-    HelperData *helper_data = user_data;
-    cookie_jar_add_cookies_from_set_cookie_headers (helper_data->cookie_jar,
-        webkit_uri_response_get_http_headers (redirected_response),
-        webkit_uri_response_get_uri (redirected_response),
-        web_resource_get_first_party_uri (resource));
-}
-
-static void web_resource_receive_response_cb (WebKitWebResource *resource,
-    GParamSpec *pspec, void *user_data) {
-
-    WebKitURIResponse *response = webkit_web_resource_get_response (resource);
-    g_return_if_fail (response != NULL);
-
-    if (webkit_uri_response_get_http_headers (response) == NULL) {
-        return;
-    }
-
-    HelperData *helper_data = user_data;
-    cookie_jar_add_cookies_from_set_cookie_headers (helper_data->cookie_jar,
-        webkit_uri_response_get_http_headers (response),
-        webkit_uri_response_get_uri (response),
-        web_resource_get_first_party_uri (resource));
-}
-
-static void web_view_resource_load_started_cb (WebKitWebView *web_view,
-    WebKitWebResource *resource, WebKitURIRequest *request, void *user_data) {
-
-    HelperData *helper_data = user_data;
-    g_return_if_fail (helper_data->cookie_jar != NULL);
-
-    GObject *resource_object = G_OBJECT (resource);
-    g_assert (g_object_get_data (resource_object, "is-main-resource") == NULL);
-    g_assert (g_object_get_data (resource_object, "first-party-uri") == NULL);
-
-    int is_main_resource = webkit_web_view_get_main_resource (web_view) == resource;
-    g_object_set_data (resource_object, "is-main-resource",
-        GINT_TO_POINTER (is_main_resource));
-    g_object_set_data_full (resource_object, "first-party-uri",
-        g_strdup (webkit_web_view_get_uri (web_view)), g_free);
-
-    g_signal_connect (resource, "notify::response",
-        G_CALLBACK (web_resource_receive_response_cb), helper_data);
-    g_signal_connect (resource, "sent-request",
-        G_CALLBACK (web_resource_sent_request_cb), helper_data);
-}
-
 static void web_view_update_load_progress_cb (WebKitWebView *web_view,
     GParamSpec *pspec, void *user_data) {
 
@@ -442,44 +281,6 @@ static void web_view_update_load_progress_cb (WebKitWebView *web_view,
         default_title, (int)(progress * 100.0));
     gtk_window_set_title (window, new_title);
     g_free (new_title);
-}
-
-static void cookie_manager_accept_policy_ready_cb (GObject *cookie_manager_object,
-    GAsyncResult *async_result, void *user_data) {
-
-    HelperData *helper_data = user_data;
-    g_return_if_fail (helper_data->cookie_jar == NULL);
-
-    GError *err = NULL;
-    WebKitCookieManager *cookie_manager = WEBKIT_COOKIE_MANAGER (cookie_manager_object);
-    WebKitCookieAcceptPolicy policy =
-        webkit_cookie_manager_get_accept_policy_finish (cookie_manager,
-            async_result, &err);
-
-    helper_data->cookie_jar = soup_cookie_jar_new ();
-
-    if (err != NULL) {
-        g_warning ("取得預設 cookie 接受原則失敗：%s", err->message);
-        g_error_free (err);
-        return;
-    }
-
-    switch (policy) {
-        case WEBKIT_COOKIE_POLICY_ACCEPT_ALWAYS:
-            soup_cookie_jar_set_accept_policy (helper_data->cookie_jar,
-                SOUP_COOKIE_JAR_ACCEPT_ALWAYS);
-            break;
-        case WEBKIT_COOKIE_POLICY_ACCEPT_NEVER:
-            soup_cookie_jar_set_accept_policy (helper_data->cookie_jar,
-                SOUP_COOKIE_JAR_ACCEPT_NEVER);
-            break;
-        case WEBKIT_COOKIE_POLICY_ACCEPT_NO_THIRD_PARTY:
-            soup_cookie_jar_set_accept_policy (helper_data->cookie_jar,
-                SOUP_COOKIE_JAR_ACCEPT_NO_THIRD_PARTY);
-            break;
-        default:
-            g_assert_not_reached ();
-    }
 }
 
 static gboolean window_close_cb (GtkWidget *window,
@@ -655,10 +456,6 @@ int main (int argc, char *argv[]) {
     g_object_set_data_full (window_object, "default-title", window_title, g_free);
 
     WebKitWebContext *web_context = webkit_web_context_new_ephemeral ();
-    webkit_cookie_manager_get_accept_policy (
-        webkit_web_context_get_cookie_manager (web_context), NULL,
-        cookie_manager_accept_policy_ready_cb, &helper_data);
-
     GtkWidget *web_view_widget = webkit_web_view_new_with_context (web_context);
     WebKitWebView *web_view = WEBKIT_WEB_VIEW (web_view_widget);
     GtkContainer *window_container = GTK_CONTAINER (window_widget);
@@ -676,8 +473,6 @@ int main (int argc, char *argv[]) {
         G_CALLBACK (web_view_load_changed_cb), &helper_data);
     g_signal_connect (web_view, "load-failed",
         G_CALLBACK (web_view_load_failed_cb), &helper_data);
-    g_signal_connect (web_view, "resource-load-started",
-        G_CALLBACK (web_view_resource_load_started_cb), &helper_data);
     g_signal_connect (web_view, "notify::estimated-load-progress",
         G_CALLBACK (web_view_update_load_progress_cb), window);
     webkit_web_view_load_uri (web_view, helper_data.login_uri);
