@@ -25,7 +25,7 @@ ceiba_dl_python_PYTHON = \
 	ceiba_dl/_version.py		\
 	$(NULL)
 
-helperdir = $(pkgdatadir)/helpers
+helperdir = $(pkglibdir)/helpers
 
 subst_cmd = sed \
 	-e 's,[@]VERSION[@],$(VERSION),g'	\
