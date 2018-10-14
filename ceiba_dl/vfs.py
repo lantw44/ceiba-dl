@@ -1,5 +1,6 @@
 # License: LGPL3+
 
+from . import ServerError
 from collections import OrderedDict
 from io import BytesIO, StringIO
 from lxml import etree
@@ -372,7 +373,11 @@ class RootCoursesDirectory(Directory):
             assert row[4][1].tag == 'br'
 
             course_path = url_to_path_and_args(row[4][0].get('href'))[0]
-            location = self.vfs.request.web_redirect(course_path)
+            try:
+                location = self.vfs.request.web_redirect(course_path)
+            except ServerError as err:
+                assert err.status == 200
+                location = course_path
             assert location
 
             redirected_path, redirected_args = url_to_path_and_args(location)
