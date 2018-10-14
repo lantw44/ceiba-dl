@@ -94,6 +94,7 @@ static void cookies_ready_cb (GObject *cookie_manager_object,
 
     HelperData *helper_data = user_data;
     GError *err = NULL;
+    bool found = false;
 
     GList *cookies = webkit_cookie_manager_get_cookies_finish (
         WEBKIT_COOKIE_MANAGER (cookie_manager_object), async_result, &err);
@@ -104,7 +105,6 @@ static void cookies_ready_cb (GObject *cookie_manager_object,
         goto free_cookies;
     }
 
-    bool found = false;
     for (GList *l = cookies; l != NULL; l = l->next) {
         SoupCookie *cookie = l->data;
         if (strcmp (soup_cookie_get_name (cookie), helper_data->cookie_name) == 0) {
