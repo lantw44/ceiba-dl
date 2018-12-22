@@ -2102,6 +2102,7 @@ class CourseGradesDirectory(Directory):
                 # 已知 grade_isranking 的值很可能不正確，因此這裡直接忽略
                 # assert grade['grade_isranking'] == grade_row_grade_isranking
 
+                grade['notes'] = html.unescape(grade['notes'])
                 assert grade['notes'] == grade_row_notes, \
                     (grade['notes'], grade_row_notes)
 
