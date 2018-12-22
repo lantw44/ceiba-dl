@@ -1592,6 +1592,7 @@ class CourseHomeworksHomeworkDirectory(Directory):
 
             self._hw['description'] = html.unescape(self._hw['description']) \
                 .replace('<br>', '').replace('</br>', '') \
+                .replace('<BR>', '').replace('</BR>', '') \
                 .replace('∼', '～').replace('•', '‧')
             hw_show_description = hw_show_description.replace('∼', '～')
             assert self._hw['description'] == hw_show_description
