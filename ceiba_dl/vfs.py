@@ -887,9 +887,10 @@ class CourseDirectory(Directory):
              'course_sn': self._sn,
              'class_no': self._class_no})
         result_keys = [
-            'lang', 'course_info', 'teacher_info', 'contents', 'content_files']
+            'lang', 'course_info', 'teacher_info']
         optional_keys = [
-            'bulletin', 'board', 'course_grade', 'homeworks']
+            'bulletin', 'contents', 'content_files', 'board',
+            'course_grade', 'homeworks']
         assert set(result.keys()) - set(optional_keys) == set(result_keys)
 
         # lang
@@ -933,8 +934,10 @@ class CourseDirectory(Directory):
                 self.vfs, self, self._sn, result['bulletin']))
 
         # contents + content_files
-        self.add(s['dir_course_contents'], CourseContentsDirectory(
-            self.vfs, self, self._sn, result['contents'], result['content_files']))
+        if 'contents' in result and 'content_files' in result:
+            self.add(s['dir_course_contents'],
+                CourseContentsDirectory(self.vfs, self, self._sn,
+                    result['contents'], result['content_files']))
 
         # board
         if 'board' in result:
