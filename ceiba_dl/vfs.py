@@ -795,7 +795,7 @@ class SemesterDirectory(Directory):
         assert set(result.keys()) == set(result_keys)
 
         days = '一二三四五六日'
-        slots = '01234@56789XABC'
+        slots = '01234@56789XABCD' # 節次 (possible time slots: See https://nol.ntu.edu.tw/nol/guest/index.php for more information)
         courses = dict()
 
         class Course(dict):
