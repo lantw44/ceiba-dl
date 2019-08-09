@@ -52,7 +52,7 @@ class Request:
         self.web_cache = dict()
         if not cipher:
             tls_backend = pycurl.version_info()[5].split('/')[0]
-            if tls_backend == 'OpenSSL':
+            if tls_backend == 'OpenSSL' or tls_backend == 'LibreSSL':
                 cipher = 'ECDHE-RSA-AES128-GCM-SHA256'
             elif tls_backend == 'GnuTLS':
                 cipher = 'ECDHE-RSA-AES128-GCM-SHA256'
