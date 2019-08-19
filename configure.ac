@@ -10,7 +10,7 @@ AM_SILENT_RULES([yes])
 
 AC_ARG_ENABLE([helper-webkitgtk],
     [AC_HELP_STRING([--disable-helper-webkitgtk],
-        [Disable WebKitGTK+-based login helper])],
+        [Disable WebKitGTK-based login helper])],
     [enable_helper_webkitgtk="$enableval"],
     [enable_helper_webkitgtk="yes"])
 AM_CONDITIONAL([ENABLE_HELPER_WEBKITGTK], [test "$enable_helper_webkitgtk" = "yes"])
@@ -43,15 +43,15 @@ if test "$enable_helper_webkitgtk" = "yes"; then
     PKG_CHECK_MODULES([WEBKITGTK], [webkit2gtk-4.0 >= 2.20], [],
         [AC_MSG_ERROR([
 
-   WebKitGTK+ library cannot be found (Filename: webkit2gtk-4.0.pc)
+   WebKitGTK library cannot be found (Filename: webkit2gtk-4.0.pc)
 
-   If you don't want to use the WebKitGTK+-based login helper program,
+   If you don't want to use the WebKitGTK-based login helper program,
    please pass --disable-helper-webkitgtk to the configure script.
 
         ])])
     AC_FUNC_FORK
     if test "$ac_cv_func_fork_works" '!=' "yes"; then
-        AC_MSG_ERROR([WebKitGTK+-based login helper requires a working fork function])
+        AC_MSG_ERROR([WebKitGTK-based login helper requires a working fork function])
     fi
 fi
 

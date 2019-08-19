@@ -38,7 +38,7 @@ CEIBA 網頁做出來的。
 
 
 == 選擇性需求
-- https://webkitgtk.org/[WebKitGTK+]，
+- https://webkitgtk.org/[WebKitGTK]，
   只有支援 Unix-like 作業系統，用來在登入輔助程式顯示網頁。
 - 任何一個 Autoconf 和 Automake 支援使用的 C 編譯器，
   這只有在編譯登入輔助程式的時候會用到。

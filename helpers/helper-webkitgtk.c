@@ -1,5 +1,5 @@
 /*
- * NTU CEIBA login helper program - WebKitGTK+-based version
+ * NTU CEIBA login helper program - WebKitGTK-based version
  * Copyright (C) 2017  Ting-Wei Lan
  *
  * This program is free software: you can redistribute it and/or modify
