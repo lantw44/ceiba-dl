@@ -36,6 +36,8 @@ CEIBA 網頁做出來的。
 - http://pycurl.io/[PycURL]，用於連線 CEIBA 網站與下載資料。
 - http://lxml.de/[lxml]，用於讀取 HTML 文件。
 
+如果你使用 `pip` 管理 Python 套件，可以執行 `pip install -r requirements.txt` 來安裝以上的函式庫。
+
 
 == 選擇性需求
 - https://webkitgtk.org/[WebKitGTK]，
