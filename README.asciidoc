@@ -216,6 +216,15 @@ https://ntu-infoplat.github.io/[InfoPlat] 網頁上的「CEIBA 雲端大硬碟�
 點進去查看完整資料，這樣的操作就已經改變點閱數了。它確實可以用來做投影片下載
 功能，但仍然需要使用者自己想辦法維持登入 cookie 有效並設定排程自動下載。
 
+=== 我的 `pycurl` 在 macOS 裝不起來，顯示 `ImportError: pycurl: libcurl link-time ssl backend (openssl) is different from compile-time ssl backend (none/other)`
+簡單來說，請先把 `pycurl` 解除安裝後再加上環境變數並重裝。如果你的 `python` 套件管理器是 `pip` 的話:
+[source,sh]
+---------------------------------------------------------------------------
+pip uninstall pycurl
+export PYCURL_SSL_LIBRARY=openssl
+pip install pycurl
+---------------------------------------------------------------------------
+
 === 這個程式會將資料快取到檔案嗎？
 不會，每次執行都是重新向 CEIBA 下載資料。所有資料都只會快取在記憶體中，
 程式結束就自動消失。如果網路狀況穩定，每次執行相同的 `ceiba-dl ls`
