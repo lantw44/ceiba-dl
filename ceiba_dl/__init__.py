@@ -10,6 +10,8 @@ import pathlib
 import pycurl
 import urllib.parse
 
+from pathvalidate import sanitize_filepath
+
 class Error(Exception):
     def __str__(self):
         return self.message
@@ -237,6 +239,7 @@ class Get:
 
     def download_link(self, path, node, retry, dcb, ecb):
         disk_path_object = pathlib.Path(path.lstrip('/'))
+        disk_path_object = pathlib.Path(sanitize_filepath(str(disk_path_object)))
         disk_path = str(disk_path_object)
         if self.vfs.is_internal_link(node):
             link_target_path = str(pathlib.PurePath(node.read_link()))
@@ -283,7 +286,8 @@ class Get:
 
     def download_regular(self, path, node, retry, dcb, ecb):
         disk_path_object = pathlib.Path(path.lstrip('/'))
-
+        disk_path_object = pathlib.Path(sanitize_filepath(str(disk_path_object)))
+        
         def ccb(*args):
             return dcb(path, *args)
 
@@ -355,6 +359,7 @@ class Get:
 
     def download_directory(self, path, node, retry, dcb, ecb):
         disk_path_object = pathlib.Path(path.lstrip('/'))
+        disk_path_object = pathlib.Path(sanitize_filepath(str(disk_path_object)))
         if disk_path_object.is_dir():
             self.logger.info('跳過已經存在的資料夾 {}' \
                 .format(str(disk_path_object)))
