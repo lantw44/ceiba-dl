@@ -90,6 +90,7 @@ class Config:
             'attr_course_grades_show': '成績公布',
             'value_course_grades_show_n': '不公布',
             'value_course_grades_show_p': '公布個人',
+            'value_course_grades_show_a': '公布全班',
             'attr_course_grades_is_changed': 'is_changed',
             'dir_course_homeworks': '作業區',
             'file_course_homeworks_homework': '作業內容.json',
