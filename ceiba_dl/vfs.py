@@ -644,7 +644,7 @@ class StudentsStudentDirectory(Directory):
 
         student_rows = student_page.xpath('//div[@id="sect_cont"]/table/tr')
         # NTNU and NTUST students may have less rows
-        #assert len(student_rows) == 12
+        assert len(student_rows) <= 12
 
         student_file = JSONFile(self.vfs, self)
         student_filename = '{}.json'.format(self._account, sn)
