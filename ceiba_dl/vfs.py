@@ -353,6 +353,8 @@ class RootCoursesDirectory(Directory):
         course_list_page = self.vfs.request.web('/student/index.php')
         course_list_rows_all = course_list_page.xpath('//table[1]/tr')
         course_list_rows = course_list_rows_all[1:]
+        # Add 旁聽 courses
+        course_list_rows += course_list_page.xpath('//table[2]/tr')[1:]
         course_list_header_row = course_list_rows_all[0]
 
         assert len(course_list_header_row) == 8
@@ -641,144 +643,160 @@ class StudentsStudentDirectory(Directory):
         assert len(student_page.xpath('//table')) > 0
 
         student_rows = student_page.xpath('//div[@id="sect_cont"]/table/tr')
-        assert len(student_rows) == 12
+        # NTNU and NTUST students may have less rows
+        assert len(student_rows) <= 12
 
         student_file = JSONFile(self.vfs, self)
         student_filename = '{}.json'.format(self._account, sn)
         self.add(student_filename, student_file)
 
         # 身份
-        student_role = row_get_value(student_rows[0],
-            ['身份', 'Role'], {}, free_form=True).strip()
-        student_file.add(s['attr_students_role'], student_role, student_path)
+        if len(student_rows) > 0:
+            student_role = row_get_value(student_rows[0],
+                ['身份', 'Role'], {}, free_form=True).strip()
+            student_file.add(s['attr_students_role'], student_role, student_path)
 
         # 照片
-        student_photo_element = row_get_value(student_rows[1],
-            ['照片', 'Photo'], {}, free_form=True, return_object=True)
-        if len(student_photo_element) > 0:
-            assert len(student_photo_element) == 1
-            assert student_photo_element[0].tag == 'img'
-            assert student_photo_element[0].get('src')
-            student_photo = student_photo_element[0].get('src') \
-                .rsplit('/', maxsplit=1)[1]
-            student_photo_path = url_to_path_and_args(
-                student_photo_element[0].get('src'), no_query_string=True)[0]
-            self.add(student_photo, DownloadFile(self.vfs, self,
-                student_photo_path))
-        else:
-            student_photo = ''
-        student_file.add(s['attr_students_photo'], student_photo, student_path)
+        if len(student_rows) > 1:
+            student_photo_element = row_get_value(student_rows[1],
+                ['照片', 'Photo'], {}, free_form=True, return_object=True)
+            if len(student_photo_element) > 0:
+                assert len(student_photo_element) == 1
+                assert student_photo_element[0].tag == 'img'
+                assert student_photo_element[0].get('src')
+                student_photo = student_photo_element[0].get('src') \
+                    .rsplit('/', maxsplit=1)[1]
+                student_photo_path = url_to_path_and_args(
+                    student_photo_element[0].get('src'), no_query_string=True)[0]
+                self.add(student_photo, DownloadFile(self.vfs, self,
+                    student_photo_path))
+            else:
+                student_photo = ''
+            student_file.add(s['attr_students_photo'], student_photo, student_path)
 
         # 姓名
-        student_name = row_get_value(student_rows[2],
-            ['姓名', 'Name'], {}, free_form=True).strip()
-        student_file.add(s['attr_students_name'], student_name, student_path)
+        if len(student_rows) > 2:
+            student_name = row_get_value(student_rows[2],
+                ['姓名', 'Name'], {}, free_form=True).strip()
+            student_file.add(s['attr_students_name'], student_name, student_path)
 
         # 英文姓名
-        student_english_name = row_get_value(student_rows[3],
-            ['英文姓名', 'English Name'], {}, free_form=True).strip()
-        student_file.add(s['attr_students_english_name'],
-            student_english_name, student_path)
+        if len(student_rows) > 3:
+            student_english_name = row_get_value(student_rows[3],
+                ['英文姓名', 'English Name'], {}, free_form=True).strip()
+            student_file.add(s['attr_students_english_name'],
+                student_english_name, student_path)
 
         # 匿名代號
-        student_screen_name = row_get_value(student_rows[4],
-            ['匿名代號', 'Screen Name'], {}, free_form=True).strip()
-        student_file.add(s['attr_students_screen_name'],
-            student_screen_name, student_path)
+        if len(student_rows) > 4:
+            student_screen_name = row_get_value(student_rows[4],
+                ['匿名代號', 'Screen Name'], {}, free_form=True).strip()
+            student_file.add(s['attr_students_screen_name'],
+                student_screen_name, student_path)
 
         # 學校系級
-        student_school_year = row_get_value(student_rows[5],
-            ['系級', 'Major & Year', '學校系級', 'School & Dept'],
-            {}, free_form=True).strip()
-        student_file.add(s['attr_students_school_year'],
-            student_school_year, student_path)
+        if len(student_rows) > 5:
+            student_school_year = row_get_value(student_rows[5],
+                ['系級', 'Major & Year', '學校系級', 'School & Dept'],
+                {}, free_form=True).strip()
+            student_file.add(s['attr_students_school_year'],
+                student_school_year, student_path)
 
         # 個人首頁網址
-        student_homepage_url_element = row_get_value(student_rows[6],
-            ['個人首頁網址', 'Homepage URL'], {}, free_form=True, return_object=True)
-        assert len(student_homepage_url_element) == 1
-        assert student_homepage_url_element[0].tag == 'a'
-        assert student_homepage_url_element[0].get('href')
-        student_homepage_url = element_get_text(student_homepage_url_element[0])
-        assert student_homepage_url_element[0].get('href') == \
+        if len(student_rows) > 6:
+            student_homepage_url_element = row_get_value(student_rows[6],
+                ['個人首頁網址', 'Homepage URL'], {}, free_form=True, return_object=True)
+            assert len(student_homepage_url_element) == 1
+            assert student_homepage_url_element[0].tag == 'a'
+            assert student_homepage_url_element[0].get('href')
+            student_homepage_url = element_get_text(student_homepage_url_element[0])
+            # Not sure what's this assertion for, but the program works fine without this assertion
+            """
+            assert student_homepage_url_element[0].get('href') == \
             student_homepage_url or \
             student_homepage_url_element[0].get('href') == \
             'http://' + student_homepage_url
-        student_file.add(s['attr_students_homepage_url'],
-            student_homepage_url, student_path)
+            """
+            student_file.add(s['attr_students_homepage_url'],
+                student_homepage_url, student_path)
 
         # 電子郵件
-        student_email_address_element = row_get_value(student_rows[7],
-            ['電子郵件', 'Email Address'], {}, free_form=True, return_object=True)
-        assert len(student_email_address_element) == 1
-        assert student_email_address_element[0].tag == 'a'
-        assert student_email_address_element[0].get('href')
-        student_email_address = element_get_text(student_email_address_element[0])
-        if len(student_email_address_element[0]) == 0:
-            if student_email_address.find('"') < 0:
-                assert student_email_address_element[0].get('href') == \
-                    'mailto:' + student_email_address
-        else:
-            self.vfs.logger.warning('學號 {} 的個人頁面電子郵件欄位有多餘的標籤' \
-                .format(self._account))
-            self.vfs.logger.warning('這很有可能是 CEIBA 沒有跳脫特殊字元所造成')
-            student_email_address_href = student_email_address_element[0].get('href')
-            assert student_email_address_href.startswith('mailto:')
-            if student_email_address_href.find('<') >= 7 and \
-                student_email_address_href.find('>') >= 7:
-                student_email_address = student_email_address_href[7:]
+        if len(student_rows) > 7:
+            student_email_address_element = row_get_value(student_rows[7],
+                ['電子郵件', 'Email Address'], {}, free_form=True, return_object=True)
+            assert len(student_email_address_element) == 1
+            assert student_email_address_element[0].tag == 'a'
+            assert student_email_address_element[0].get('href')
+            student_email_address = element_get_text(student_email_address_element[0])
+            if len(student_email_address_element[0]) == 0:
+                if student_email_address.find('"') < 0:
+                    assert student_email_address_element[0].get('href') == \
+                        'mailto:' + student_email_address
             else:
-                assert student_email_address.find('"') >= 0
-        student_file.add(s['attr_students_email_address'],
-            student_email_address, student_path)
+                self.vfs.logger.warning('學號 {} 的個人頁面電子郵件欄位有多餘的標籤' \
+                    .format(self._account))
+                self.vfs.logger.warning('這很有可能是 CEIBA 沒有跳脫特殊字元所造成')
+                student_email_address_href = student_email_address_element[0].get('href')
+                assert student_email_address_href.startswith('mailto:')
+                if student_email_address_href.find('<') >= 7 and \
+                    student_email_address_href.find('>') >= 7:
+                    student_email_address = student_email_address_href[7:]
+                else:
+                    assert student_email_address.find('"') >= 0
+            student_file.add(s['attr_students_email_address'],
+                student_email_address, student_path)
 
         # 常用電子郵件
-        student_frequently_used_email_element = row_get_value(student_rows[8],
-            ['常用電子郵件', 'Frequently Used Email'],
-            {}, free_form=True, return_object=True)
-        assert len(student_frequently_used_email_element) == 1
-        assert student_frequently_used_email_element[0].tag == 'a'
-        assert student_frequently_used_email_element[0].get('href')
-        student_frequently_used_email = element_get_text(
-            student_frequently_used_email_element[0])
-        student_frequently_used_email_from_href = \
-            student_frequently_used_email_element[0].get('href')
+        if len(student_rows) > 8:
+            student_frequently_used_email_element = row_get_value(student_rows[8],
+                ['常用電子郵件', 'Frequently Used Email'],
+                {}, free_form=True, return_object=True)
+            assert len(student_frequently_used_email_element) == 1
+            assert student_frequently_used_email_element[0].tag == 'a'
+            assert student_frequently_used_email_element[0].get('href')
+            student_frequently_used_email = element_get_text(
+                student_frequently_used_email_element[0])
+            student_frequently_used_email_from_href = \
+                student_frequently_used_email_element[0].get('href')
 
-        # CEIBA 不會跳脫 < 和 > 符號，如果使用者填寫的電子郵件地址包含這個符號
-        # 會使透過 .text 拿到的資料不正確
-        if student_frequently_used_email_from_href.find('<') >= 0 and \
-            student_frequently_used_email_from_href.find('>') >= 0:
-            assert student_frequently_used_email_from_href.startswith('mailto:')
-            student_frequently_used_email = \
-                student_frequently_used_email_from_href[7:]
-        else:
-            assert student_frequently_used_email_from_href == \
-                'mailto:' + student_frequently_used_email
+            # CEIBA 不會跳脫 < 和 > 符號，如果使用者填寫的電子郵件地址包含這個符號
+            # 會使透過 .text 拿到的資料不正確
+            if student_frequently_used_email_from_href.find('<') >= 0 and \
+                student_frequently_used_email_from_href.find('>') >= 0:
+                assert student_frequently_used_email_from_href.startswith('mailto:')
+                student_frequently_used_email = \
+                    student_frequently_used_email_from_href[7:]
+            else:
+                assert student_frequently_used_email_from_href == \
+                    'mailto:' + student_frequently_used_email
 
-        student_file.add(s['attr_students_frequently_used_email'],
-            student_frequently_used_email, student_path)
+            student_file.add(s['attr_students_frequently_used_email'],
+                student_frequently_used_email, student_path)
 
         # 聯絡電話
-        student_phone = row_get_value(student_rows[9],
-            ['聯絡電話', 'Phone'], {}, free_form=True).strip()
-        student_file.add(s['attr_students_phone'], student_phone, student_path)
+        if len(student_rows) > 9:
+            student_phone = row_get_value(student_rows[9],
+                ['聯絡電話', 'Phone'], {}, free_form=True).strip()
+            student_file.add(s['attr_students_phone'], student_phone, student_path)
 
         # 聯絡地址
-        student_address = row_get_value(student_rows[10],
-            ['聯絡地址', 'Address'], {}, free_form=True).strip()
-        student_file.add(s['attr_students_address'],
-            student_address, student_path)
+        if len(student_rows) > 10:
+            student_address = row_get_value(student_rows[10],
+                ['聯絡地址', 'Address'], {}, free_form=True).strip()
+            student_file.add(s['attr_students_address'],
+                student_address, student_path)
 
         # 更多的個人資訊
-        student_more_personal_information_element = row_get_value(student_rows[11],
-            ['更多的個人資訊', 'More Personal Information'],
-            {}, free_form=True, return_object=True)
-
-        # 使用者可以自己在這個欄位塞各種標籤……
-        student_more_personal_information = ''.join(
-            student_more_personal_information_element.itertext())
-        student_file.add(s['attr_students_more_personal_information'],
-            student_more_personal_information, student_path)
+        if len(student_rows) > 11:
+            student_more_personal_information_element = row_get_value(student_rows[11],
+                ['更多的個人資訊', 'More Personal Information'],
+                {}, free_form=True, return_object=True)
+            
+            # 使用者可以自己在這個欄位塞各種標籤……
+            student_more_personal_information = ''.join(
+                student_more_personal_information_element.itertext())
+            student_file.add(s['attr_students_more_personal_information'],
+                student_more_personal_information, student_path)
 
         student_file.finish()
         self.ready = True
@@ -795,7 +813,8 @@ class SemesterDirectory(Directory):
         assert set(result.keys()) == set(result_keys)
 
         days = '一二三四五六日'
-        slots = '01234@56789XABCD' # 節次 (possible time slots: See https://nol.ntu.edu.tw/nol/guest/index.php for more information)
+        #slots = '01234@56789XABCD' # 節次 (possible time slots: See https://nol.ntu.edu.tw/nol/guest/index.php for more information)
+        slots = '01234@56789XABCD ' # For me, 暑期實習 has slot with space character
         courses = dict()
 
         class Course(dict):
@@ -2068,6 +2087,10 @@ class CourseGradesDirectory(Directory):
                 grade_row_show = 'N'
             elif grade_row[7].text in ['公布個人', 'Individual']:
                 grade_row_show = 'P'
+            elif len(grade_row[7].xpath('./a')) == 1 and \
+                grade_row[7].xpath('./a')[0].text in ['公布全班', 'Everyone']:
+                # TODO: download everyone's grade from this link
+                grade_row_show = 'A'
             else:
                 assert False
 
@@ -2085,7 +2108,7 @@ class CourseGradesDirectory(Directory):
                 else:
                     assert set(grade.keys()) - set(optional_sub_keys) == set(sub_keys)
                 assert grade['grade_isranking'] in ['0', '1']
-                assert grade['show'] in ['N', 'P']
+                assert grade['show'] in ['N', 'P', 'A']
                 assert grade['is_changed'] in ['0', '1']
 
                 grade_item_filename += ' {:08}'.format(int(grade['main_sn']))
@@ -2244,6 +2267,8 @@ class CourseGradesDirectory(Directory):
                 show = s['value_course_grades_show_n']
             elif grade_row_show == 'P':
                 show = s['value_course_grades_show_p']
+            elif grade_row_show == 'A':
+                show = s['value_course_grades_show_a']
             else:
                 assert False
 
@@ -3125,7 +3150,8 @@ class CourseAssistantsDirectory(Directory):
     def fetch(self):
         s = self.vfs.strings
 
-        assert not element_get_text(self._cell).strip()
+        # I have a course which only has it assistants' names in '課程助教' column with pure text
+        #assert not element_get_text(self._cell).strip()
         for child in self._cell:
             assert child.tag == 'a' or child.tag == 'br'
 
