@@ -991,8 +991,10 @@ class CourseDirectory(Directory):
             self.vfs, self, self._sn, result['teacher_info']))
 
         # 修課學生
-        self.add(s['dir_course_students'], CourseRosterDirectory(
-            self.vfs, self, self._sn, self._name))
+        if ceiba_function_enabled(self.vfs.request, self._sn,
+            'student', '/modules/student/student.php'):
+            self.add(s['dir_course_students'], CourseRosterDirectory(
+                self.vfs, self, self._sn, self._name))
 
         # 課程助教
         course_list_row = self.vfs.root.courses.search_course_list(self._sn)
@@ -1096,8 +1098,10 @@ class WebCourseDirectory(Directory):
             self.vfs, self, self._sn, []))
 
         # 修課學生
-        self.add(s['dir_course_students'], CourseRosterDirectory(
-            self.vfs, self, self._sn, self._name))
+        if ceiba_function_enabled(self.vfs.request, self._sn,
+            'student', '/modules/student/student.php'):
+            self.add(s['dir_course_students'], CourseRosterDirectory(
+                self.vfs, self, self._sn, self._name))
 
         # 課程助教
         course_list_row = self.vfs.root.courses.search_course_list(self._sn)
